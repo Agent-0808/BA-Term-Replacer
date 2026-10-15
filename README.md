@@ -37,28 +37,40 @@
 
 **② 装依赖（只需一次）**
 
-在仓库目录里跑：
+打开 cmd（按 `Win` 键 → 输入 `cmd` → 回车），**先切到仓库所在的文件夹**：
 
-```powershell
-cd <仓库目录>
+```cmd
+:: 把下面的路径换成你自己的（尖括号 < > 只是文档里的占位符，不要照抄）
+cd /d <你放这个仓库的路径>
+```
+
+> · `cd` = 切换当前目录　·`/d` 用于跨盘符切换（例如从 C 盘切到 F 盘）
+> · 不知道路径？在文件夹地址栏点一下，那个就是完整路径
+
+然后安装依赖：
+
+```cmd
 pip install -r requirements.txt
 ```
 
-国内网络慢就加镜像：
+国内网络慢的话加个镜像（推荐）：
 
-```powershell
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
+```cmd
+py -3.12 -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 ```
+
+> **这行命令什么意思**：`pip` 是 Python 的包管理器；`-r requirements.txt` = "按这个清单文件里列的库来装"。
+> 我们的清单里只有一个 `sqlcipher3-wheels`（2.6 MB，用来读写游戏那个加密数据库）。
 
 **验证是否装好：**
 
-```powershell
+```cmd
 python -c "import sqlcipher3; print('ok')"
 ```
 
-打印 `ok` 就对了。（这个依赖只用来读写游戏那个加密数据库，安装包只有 2.6 MB。）
+打印出 `ok` 就成了。**装一次即可，以后都不用再装。**
 
-> 忘了装也没关系：脚本启动时会自检，发现缺失会**自动帮你装一次**。但还是建议按上面的步骤先装好。
+> 忘了装也没关系：脚本启动时会自检，发现缺失会**自动帮你装一次**。但还是建议先按上面装好。
 
 **③ 准备 adb（多数情况不用装）**
 
@@ -84,13 +96,14 @@ python -c "import sqlcipher3; print('ok')"
 
 **⑤ 配好后自检一次**
 
-```powershell
-cd <仓库目录>
-adb devices                      # 应看到 XXXXXXXX    device
-.\localize_phone.ps1 -DryRun     # 检查 Python / 依赖 / 设备是否都就绪（不会写入手机）
+**还在刚才那个文件夹里**（如果换了新窗口，先 `cd /d` 回来），跑：
+
+```cmd
+adb devices                      :: 应看到 XXXXXXXX    device
+powershell -ExecutionPolicy Bypass -File localize_phone.ps1 -DryRun
 ```
 
-两条都正常，说明环境 OK，以后每次只需要**双击 `运行.bat`**。
+第一条能看到你的设备序列号、第二条一路打印 `[ok]`，说明环境 OK。以后每次只需要**双击 `运行.bat`**。
 
 ### 每次汉化（游戏更新后重跑）
 
