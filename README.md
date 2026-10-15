@@ -19,43 +19,103 @@
 
 ## 快速开始
 
-### 0. 准备
+### 一次性准备（只做一次）
 
-```bash
-pip install -r requirements.txt      # 只需要 sqlcipher3-wheels
-```
+**① 装 Python（3.9 或更高）**
 
-另外需要 **adb**（Android platform-tools）在 PATH 里，手机打开「开发者选项 → USB 调试」。
+到 https://www.python.org/downloads/ 下载安装，**务必勾选 `Add python.exe to PATH`**。
 
-### 1. Windows
+**② 装 adb（Android 平台工具）**
 
-```
-双击 运行.bat
-```
+1. 下载 [platform-tools](https://developer.android.com/tools/releases/platform-tools)，解压到例如 `C:\platform-tools`
+2. 把这个目录加进系统 PATH
+   （Win 搜索「环境变量」→ 编辑系统环境变量 → 环境变量 → Path → 新建 → 填目录）
+3. **新开**一个 PowerShell 窗口验证：
 
-或者：
+   ```powershell
+   adb version
+   ```
+
+   能打印出版本号就对了。
+
+**③ 装依赖**（在仓库目录里跑一次）
 
 ```powershell
-.\localize_phone.ps1                 # 自动选设备
-.\localize_phone.ps1 -Serial <序列号>
-.\localize_phone.ps1 -DryRun         # 只转换不推送
+cd <仓库目录>
+pip install -r requirements.txt
 ```
 
-### 2. Linux / macOS / WSL
+**④ 手机开启 USB 调试**
+
+设置 → 关于手机 → **连点「版本号」7 次**（提示"你已处于开发者模式"）
+→ 返回设置 → 系统 → **开发者选项** → 打开 **USB 调试**。
+
+### 每次汉化（游戏更新后重跑）
+
+| 步骤 | 操作 |
+|---|---|
+| 1 | 手机用 **USB 数据线**连电脑（有些线只能充电，认不到设备就换一根） |
+| 2 | 手机弹出「**允许 USB 调试吗？**」→ 点**允许**（建议勾"一律允许"） |
+| 3 | **关掉手机上的游戏**（开着会占用要替换的文件） |
+| 4 | 双击仓库里的 **`运行.bat`** |
+| 5 | 等 1–3 分钟（脚本会逐步打印 `[ok]`） |
+| 6 | 打开游戏 → 界面和剧情就是简体了 |
+
+脚本内部自动完成：
+
+```
+停游戏 → 从手机拉出原文件（备份到 work/） → 繁转简 → 重算 catalog 的 CRC32 → 推回手机
+```
+
+**游戏每次大版本更新后重跑一遍即可。** 重复运行是安全的（已转换过的内容不会被二次转换）。
+
+### 命令行用法
+
+Windows：
+
+```powershell
+.\localize_phone.ps1                  # 自动选设备（优先挑非模拟器）
+.\localize_phone.ps1 -Serial <序列号>  # 多台设备时指定
+.\localize_phone.ps1 -DryRun          # 只拉取 + 转换 + 改 catalog，不推送
+.\localize_phone.ps1 -Key <64位hex>   # 指定密钥
+```
+
+Linux / macOS / WSL：
 
 ```bash
 chmod +x localize_phone.sh
-./localize_phone.sh                  # 自动选设备
+./localize_phone.sh                   # 自动选设备
 ./localize_phone.sh <serial>
 DRY_RUN=1 ./localize_phone.sh
+BA_KEY=<64位hex> ./localize_phone.sh
 ```
 
-### 3. 完事
+### 先确认设备连上了
 
-脚本会自动：**停游戏 → 从手机拉出原文件（保留备份）→ 繁转简 → 重算 catalog 的 CRC32 → 推回手机**。
-然后打开游戏，界面/剧情就是简体了。
+```powershell
+adb devices
+```
 
-**游戏每次大版本更新后重跑一次即可**（库会变）。
+输出里要看到 `XXXXXXXX	device`。
+如果是 `unauthorized` → 手机上重新点一次"允许 USB 调试"；
+如果是 `offline` → 拔插一次数据线。
+
+---
+
+## 常见问题
+
+| 现象 | 原因 / 解决 |
+|---|---|
+| `adb not found` / 不是内部或外部命令 | platform-tools 没加进 PATH，或装完没重开窗口 |
+| `no device` / 设备列表为空 | USB 调试没开；没点"允许"；数据线只能充电（换线）；换个 USB 口 |
+| `unauthorized` | 手机上重新点「允许 USB 调试」；或在开发者选项里"撤销 USB 调试授权"后重插 |
+| 卡在 `pull` 很久 | 手机锁屏了 → 保持解锁；或换 USB 3.0 口（330 MB 正常约 10 秒） |
+| `wrong key` / 打不开数据库 | 游戏大版本更新换了密钥 → 提 Issue 并说明游戏版本号 |
+| `catalog patch failed` | 游戏改了 catalog 格式 → 提 Issue 并附上你的 `TableCatalog.bytes` |
+| 进游戏又变回繁体了 | 你点了游戏内「资源修复 / 重新下载」→ 重跑 `运行.bat` 即可 |
+| 手机重启后连不上 | adb 授权会掉，重新插线点一次"允许" |
+| 只想先试不想推送 | 用命令行跑 `.\localize_phone.ps1 -DryRun` |
+| 转换完界面正常但少数词仍是台式 | 词库覆盖面问题，欢迎 PR 补词（改 `dict/` 或提 Issue 给具体词条） |
 
 ---
 
