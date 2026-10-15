@@ -199,6 +199,28 @@ Step 'pushing the patched files back'
 & $Adb -s $Dev push $CnCat "$Base/Catalog/TableBundles/TableCatalog.bytes" 2>&1 | Select-String 'pushed|error'
 
 Step 'done'
+
+# ---------------------------------------------------------------- font fix
+# The Android client bundles no Chinese font, so Chinese is rendered with a SYSTEM font
+# chosen by the app's language.  With no per-app language the framework may pick a
+# Traditional font, which lacks the Simplified glyphs we just wrote -> per-character font
+# fallback -> mixed glyph sizes / weights.  Setting the app language to Simplified makes
+# Android pick a full Simplified font, so everything renders uniformly.  No root needed.
+Step 'fixing font fallback (app language -> Simplified Chinese)'
+$sdkRaw = ((& $Adb -s $Dev shell "getprop ro.build.version.sdk" 2>&1) -join ' ').Trim()
+$sdk = 0
+if ($sdkRaw -match '(\d+)') { $sdk = [int]$Matches[1] }
+if ($sdk -ge 33) {
+    & $Adb -s $Dev shell "cmd locale set-app-locales $Pkg --locales zh-Hans-CN" 2>&1 | ForEach-Object { Write-Host "  $_" }
+    $now = ((& $Adb -s $Dev shell "cmd locale get-app-locales $Pkg" 2>&1) -join ' ').Trim()
+    Ok "app locale = $now"
+    Write-Host '  (restart the game once so it re-loads the font)'
+} else {
+    Write-Host "  Android $sdk < 13 - per-app language is not supported."
+    Write-Host '  If Chinese text has mixed glyph sizes, set the SYSTEM language to' -ForegroundColor Yellow
+    Write-Host '  Simplified Chinese (Settings -> System -> Languages). Same fallback fix.' -ForegroundColor Yellow
+}
+
 Ok 'Launch the game - the UI and story text should be Simplified Chinese.'
 Write-Host ''
 Write-Host 'Notes:' -ForegroundColor Yellow

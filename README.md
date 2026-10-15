@@ -174,6 +174,7 @@ adb devices
 | 只想先试不想推送 | 用命令行跑 `.\localize_phone.ps1 -DryRun` |
 | 能在模拟器上用吗 | 能（MuMu / LDPlayer 等都能推）。**本工具主要面向真机手机**，模拟器适合先试；同时连着手机和模拟器时脚本会**优先选真机**，要指定就加 `-Serial <序列号>` |
 | 转换完界面正常但少数词仍是台式 | 词库覆盖面问题，欢迎 PR 补词（改 `dict/` 或提 Issue 给具体词条） |
+| 汉化后**某些字大小/粗细和别的不一样** | 游戏不自带中文字体，被改动过的字会触发字体回退。脚本会自动设置 App 语言**减轻**这个问题，但彻底解决需要改游戏字体包（详见「已知问题」）。**不影响功能** |
 
 ---
 
@@ -262,6 +263,52 @@ See [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) for the reverse-engineered deta
 本仓库自有代码：**MIT**（见 [LICENSE](LICENSE)）。
 `dict/` 下的 OpenCC 词库：**Apache-2.0**（见 [dict/LICENSE-OpenCC.txt](dict/LICENSE-OpenCC.txt)）。
 其余第三方署名见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+
+---
+
+## 已知问题：部分字形的大小 / 粗细不统一
+
+### 现象
+
+汉化后界面是简体、功能完全正常，但**被改动过的字**（動→动、務→务、購→购 这类）比
+**繁简同形的字**（活、一、石 这类）看起来**更细或更小**，同一个词里字体不统一。
+
+### 原因（实测定位，已查到底）
+
+```
+安卓版游戏【不自带中文字体，也不指定字体名】
+  · APK 里只有一个 assets/fonts/NotoSansKR-Regular-Hestia.otf（韩文）
+  · GameData 里只有 MALGUN(韩) / MPLUS1p(日) / CCG_LINESeedKR
+  · global-metadata.dat（31.8 MB，全部 C# 字符串）里搜不到任何中文字体名
+    （NotoSansTC / NotoSansSC / Noto Sans / sans-serif / Arial / MainFont … 全都没有）
+  · 只找到 Unity 的 Font.fontNames 与 GetOSInstalledFontNames
+        ↓
+中文渲染完全交给【操作系统按 App 语言挑的系统字体】
+        ↓
+系统字体（或游戏自带日文字体）缺简体独有字形（JIS 有「務/購/輝」没有「务/购/辉」）
+        ↓
+逐字回退到另一款字体 → 一个字串里混了两款字体 → 大小 / 粗细不一致
+```
+
+> PC 端没这个问题：PC 版**自带完整中文字体资产**，社区汉化直接替换成思源黑体简体版即可。
+> 安卓版**没有这个资产可换**，也**没有字体名可改** —— 这条路已经查到头。
+
+### 目前能做到的
+
+| 方案 | 效果 |
+|---|---|
+| 脚本自动把 App 语言设为简体（Android 13+） | ✅ **能减轻**（让系统优先给完整简体的系统字体），但游戏自带字体造成的回退仍在 |
+| 手机 root 后把系统字体替换为全量简体字体 | ✅ **可彻底解决** |
+| 改游戏资源包 / 改 APK | ❌ 已确认**无字体资产、无字体名可改** |
+| 就这样用 | ✅ 简体文本 100% 正确可读，**只是字形外观不完美，不影响任何功能** |
+
+> **排查记录**（供后来者参考，省得重复走）：
+> 1. `files/PUB` 13.4 GB / 26,068 个 bundle **已全部扫描**；OBB 目录 0 KB（没有）
+> 2. 全盘搜过字体家族名字符串 → 无
+> 3. 游戏进程实际 mmap 的字体全是 `/system/fonts/` 下的：
+>    `NotoSansTC-Regular.otf`(3 MB 子集) / `NotoSansSC-Regular/Bold.otf` / `NotoSansCJK-Regular.ttc`
+> 4. `global-metadata.dat` 内无任何中文字体名（见上）
+> 5. 结论：字体选择完全由「OS + App 语言」决定，游戏侧无干预点
 
 ---
 
