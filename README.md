@@ -5,7 +5,8 @@
 - ✅ **不需要 root**（`adb push` 到 `/sdcard/Android/data/...` 即可）
 - ✅ **不需要重签 APK**、不需要 Magisk 模块、不碰服务器
 - ✅ 改的是**本地显示文本**，不动账号、存档、网络请求
-- ✅ 手机和模拟器都能用，Windows / Linux / macOS 都有脚本
+- ✅ **主要给真机（手机）用**；MuMu / LDPlayer 等模拟器也能用（方便测试）
+- ✅ Windows / Linux / macOS 都有脚本
 
 > 仅适用于 **GL（国际服，繁中）**。日服/韩服/国服的库和文本表不同，不通用。
 
@@ -25,7 +26,16 @@
 
 到 https://www.python.org/downloads/ 下载安装，**务必勾选 `Add python.exe to PATH`**。
 
-**② 装 adb（Android 平台工具）**
+**② 准备 adb（大概率不用装）**
+
+脚本按这个顺序找 adb，找到一个就用：
+
+1. 环境变量 `ADB`（你自己指定路径）
+2. PATH 里的 `adb`
+3. **模拟器自带的 adb** —— 装了 MuMu / LDPlayer / 夜神 / BlueStacks 就直接用它的，**不用额外装**
+   （例如 MuMu 的就在 `...\Netease\MuMu\nx_main\adb.exe`）
+
+如果上面都没有（比如你只用真机、没装模拟器），再去装：
 
 1. 下载 [platform-tools](https://developer.android.com/tools/releases/platform-tools)，解压到例如 `C:\platform-tools`
 2. 把这个目录加进系统 PATH
@@ -115,6 +125,7 @@ adb devices
 | 进游戏又变回繁体了 | 你点了游戏内「资源修复 / 重新下载」→ 重跑 `运行.bat` 即可 |
 | 手机重启后连不上 | adb 授权会掉，重新插线点一次"允许" |
 | 只想先试不想推送 | 用命令行跑 `.\localize_phone.ps1 -DryRun` |
+| 能在模拟器上用吗 | 能（MuMu / LDPlayer 等都能推）。**本工具主要面向真机手机**，模拟器适合先试；同时连着手机和模拟器时脚本会**优先选真机**，要指定就加 `-Serial <序列号>` |
 | 转换完界面正常但少数词仍是台式 | 词库覆盖面问题，欢迎 PR 补词（改 `dict/` 或提 Issue 给具体词条） |
 
 ---

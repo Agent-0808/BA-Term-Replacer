@@ -22,14 +22,39 @@ function Ok($m)   { Write-Host "  [ok] $m" -ForegroundColor Green }
 function Bad($m)  { Write-Host "  [!!] $m" -ForegroundColor Red }
 
 # ---------------------------------------------------------------- tools
+# adb: env override -> PATH -> common bundled locations (emulators ship their own adb)
 $Adb = $env:ADB
 if (-not $Adb) {
     $cmd = Get-Command adb -ErrorAction SilentlyContinue
     if ($cmd) { $Adb = $cmd.Source }
 }
-if (-not $Adb) { Bad 'adb not found. Install Android platform-tools and add it to PATH, or set $env:ADB.'; exit 1 }
+if (-not $Adb) {
+    $guesses = @(
+        "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe",
+        "C:\platform-tools\adb.exe",
+        "C:\Android\platform-tools\adb.exe",
+        "${env:ProgramFiles(x86)}\Netease\MuMu\nx_main\adb.exe",
+        "$env:ProgramFiles\Netease\MuMu\nx_main\adb.exe",
+        "$env:ProgramFiles\Netease\MuMuPlayer-12.0\shell\adb.exe",
+        "C:\Program Files\Netease\MuMu\nx_main\adb.exe",
+        "D:\Program Files\Netease\MuMu\nx_main\adb.exe",
+        "E:\Program Files\Netease\MuMu\nx_main\adb.exe",
+        "${env:ProgramFiles(x86)}\Nox\bin\adb.exe",
+        "$env:ProgramFiles\BlueStacks_nxt\HD-Adb.exe",
+        "$env:ProgramFiles\LDPlayer\LDPlayer9\adb.exe",
+        "D:\LDPlayer\LDPlayer9\adb.exe"
+    )
+    foreach ($g in $guesses) { if (Test-Path $g) { $Adb = $g; break } }
+}
+if (-not $Adb) {
+    Bad 'adb not found.'
+    Write-Host '     Install Android platform-tools and add it to PATH,'
+    Write-Host '     or set the path explicitly:   $env:ADB = "C:\path\to\adb.exe"'
+    exit 1
+}
 Ok "adb = $Adb"
 
+# python: env override -> PATH -> common install locations
 $Py = $env:PYTHON
 if (-not $Py) {
     foreach ($cand in @('python', 'python3', 'py')) {
@@ -37,7 +62,24 @@ if (-not $Py) {
         if ($cmd) { $Py = $cmd.Source; break }
     }
 }
-if (-not $Py) { Bad 'python not found in PATH (or set $env:PYTHON).'; exit 1 }
+if (-not $Py) {
+    $roots = @("$env:LOCALAPPDATA\Programs\Python", "$env:ProgramFiles", "C:\")
+    foreach ($r in $roots) {
+        if (-not (Test-Path $r)) { continue }
+        $hit = Get-ChildItem $r -Directory -Filter 'Python3*' -ErrorAction SilentlyContinue |
+               Sort-Object Name -Descending | Select-Object -First 1
+        if ($hit) {
+            $exe = Join-Path $hit.FullName 'python.exe'
+            if (Test-Path $exe) { $Py = $exe; break }
+        }
+    }
+}
+if (-not $Py) {
+    Bad 'python not found.'
+    Write-Host '     Install Python 3.9+ (tick "Add python.exe to PATH"),'
+    Write-Host '     or set it explicitly:   $env:PYTHON = "C:\path\to\python.exe"'
+    exit 1
+}
 Ok "python = $Py"
 
 $PackDb  = Join-Path $Root 'tools\patch_db.py'
