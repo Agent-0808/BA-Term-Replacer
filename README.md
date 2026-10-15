@@ -22,11 +22,45 @@
 
 ### 一次性准备（只做一次）
 
-**① 装 Python（3.9 或更高）**
+**① 装 Python（推荐 3.10 – 3.13 稳定版）**
 
-到 https://www.python.org/downloads/ 下载安装，**务必勾选 `Add python.exe to PATH`**。
+| 项目 | 说明 |
+|---|---|
+| 下载 | https://www.python.org/downloads/ |
+| 版本 | **3.10 / 3.11 / 3.12 / 3.13** —— 都用稳定版 |
+| 安装要点 | ✅ 必须勾选 **Add python.exe to PATH** |
+| 验证 | **新开**一个窗口跑 `python --version`，应显示 `Python 3.12.x` 之类 |
 
-**② 准备 adb（大概率不用装）**
+> ⚠️ **不要用 alpha / beta / rc 版 Python**（版本号带 `a` / `b` / `rc` 的，如 `3.14.0a5`）。
+> 预编译的库是按该版本**正式版的 ABI** 编译的，在测试版上会「能 import、一用就崩」
+> （报 `0xC0000005`），非常隐蔽。脚本会自动探测并跳过这类解释器。
+
+**② 装依赖（只需一次）**
+
+在仓库目录里跑：
+
+```powershell
+cd <仓库目录>
+pip install -r requirements.txt
+```
+
+国内网络慢就加镜像：
+
+```powershell
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
+```
+
+**验证是否装好：**
+
+```powershell
+python -c "import sqlcipher3; print('ok')"
+```
+
+打印 `ok` 就对了。（这个依赖只用来读写游戏那个加密数据库，安装包只有 2.6 MB。）
+
+> 忘了装也没关系：脚本启动时会自检，发现缺失会**自动帮你装一次**。但还是建议按上面的步骤先装好。
+
+**③ 准备 adb（多数情况不用装）**
 
 脚本按这个顺序找 adb，找到一个就用：
 
@@ -35,30 +69,28 @@
 3. **模拟器自带的 adb** —— 装了 MuMu / LDPlayer / 夜神 / BlueStacks 就直接用它的，**不用额外装**
    （例如 MuMu 的就在 `...\Netease\MuMu\nx_main\adb.exe`）
 
-如果上面都没有（比如你只用真机、没装模拟器），再去装：
+以上都没有（比如只用真机、没装模拟器），再自己装：
 
-1. 下载 [platform-tools](https://developer.android.com/tools/releases/platform-tools)，解压到例如 `C:\platform-tools`
-2. 把这个目录加进系统 PATH
-   （Win 搜索「环境变量」→ 编辑系统环境变量 → 环境变量 → Path → 新建 → 填目录）
-3. **新开**一个 PowerShell 窗口验证：
-
-   ```powershell
-   adb version
-   ```
-
-   能打印出版本号就对了。
-
-**③ 装依赖**（在仓库目录里跑一次）
-
-```powershell
-cd <仓库目录>
-pip install -r requirements.txt
-```
+| 项目 | 说明 |
+|---|---|
+| 下载 | [platform-tools](https://developer.android.com/tools/releases/platform-tools) |
+| 安装 | 解压到例如 `C:\platform-tools`，把该目录加进系统 PATH<br>（Win 搜「环境变量」→ 编辑系统环境变量 → 环境变量 → Path → 新建 → 填目录） |
+| 验证 | **新开**窗口跑 `adb version`，能打印版本号即可 |
 
 **④ 手机开启 USB 调试**
 
 设置 → 关于手机 → **连点「版本号」7 次**（提示"你已处于开发者模式"）
 → 返回设置 → 系统 → **开发者选项** → 打开 **USB 调试**。
+
+**⑤ 配好后自检一次**
+
+```powershell
+cd <仓库目录>
+adb devices                      # 应看到 XXXXXXXX    device
+.\localize_phone.ps1 -DryRun     # 检查 Python / 依赖 / 设备是否都就绪（不会写入手机）
+```
+
+两条都正常，说明环境 OK，以后每次只需要**双击 `运行.bat`**。
 
 ### 每次汉化（游戏更新后重跑）
 
@@ -116,6 +148,8 @@ adb devices
 
 | 现象 | 原因 / 解决 |
 |---|---|
+| `no usable Python + sqlcipher3 found` | 脚本会**逐个试探**机器上的 Python（真的建一个加密库读写一遍），全部不可用时才报这个。常见原因：① 没装 `sqlcipher3` → `pip install -r requirements.txt`；② Python 是 **alpha/beta 版**（如 `3.14.0a5`）→ 装个 **3.12/3.13 稳定版**；③ 多版本共存 → 用 `-Python "C:\...\python.exe"` 或 `$env:PYTHON` 指定 |
+| 脚本中途崩溃 / `0xC0000005` | 同上，Python 版本与预编译库 ABI 不匹配，换稳定版 Python |
 | `adb not found` / 不是内部或外部命令 | platform-tools 没加进 PATH，或装完没重开窗口 |
 | `no device` / 设备列表为空 | USB 调试没开；没点"允许"；数据线只能充电（换线）；换个 USB 口 |
 | `unauthorized` | 手机上重新点「允许 USB 调试」；或在开发者选项里"撤销 USB 调试授权"后重插 |
@@ -215,3 +249,17 @@ See [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) for the reverse-engineered deta
 本仓库自有代码：**MIT**（见 [LICENSE](LICENSE)）。
 `dict/` 下的 OpenCC 词库：**Apache-2.0**（见 [dict/LICENSE-OpenCC.txt](dict/LICENSE-OpenCC.txt)）。
 其余第三方署名见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+
+---
+
+## 免责声明 / Disclaimer
+
+This project is intended solely for educational and demonstrative purposes and does not provide any actual resources. Please note that all content downloaded through this project should only be used for legal and legitimate purposes. The developers are not liable for any direct or indirect loss, damage, legal liability, or other consequences that may arise from the use of this project. Users assume all risks associated with the use of this project and must ensure compliance with all relevant laws and regulations. If anyone uses this project for any unauthorized or illegal activities, the developers bear no responsibility. Users are responsible for their own actions and should understand the risks involved in using this project.
+
+"Blue Archive" is a registered trademark of NEXON Korea Corp. & NEXON GAMES Co., Ltd. All rights reserved.
+
+该仓库仅供学习和展示用途，不托管任何实际资源。请注意，所有通过本项目下载的内容均应仅用于合法和正当的目的。开发者不对任何人因使用本项目而可能引发的直接或间接的损失、损害、法律责任或其他后果承担任何责任。用户在使用本项目时需自行承担风险，并确保遵守所有相关法律法规。如果有人使用本项目从事任何未经授权或非法的活动，开发者对此不承担任何责任。用户应对自身的行为负责，并了解使用本项目可能带来的任何风险。
+
+“蔚蓝档案”是上海星啸网络科技有限公司的注册商标，版权所有。
+
+「ブルーアーカイブ」は株式会社Yostarの登録商標です。著作権はすべて保有されています。

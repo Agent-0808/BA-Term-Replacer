@@ -8,9 +8,14 @@
 param(
     [string]$Serial = "",
     [string]$Key = "",
+    [string]$Python = "",
     [switch]$DryRun
 )
 $ErrorActionPreference = 'Continue'
+
+# Show child-process output (python) as UTF-8 so nothing gets mangled in cmd.exe.
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+try { $OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
 $Root   = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $Pkg    = 'com.nexon.bluearchive'
@@ -54,33 +59,90 @@ if (-not $Adb) {
 }
 Ok "adb = $Adb"
 
-# python: env override -> PATH -> common install locations
-$Py = $env:PYTHON
-if (-not $Py) {
-    foreach ($cand in @('python', 'python3', 'py')) {
-        $cmd = Get-Command $cand -ErrorAction SilentlyContinue
-        if ($cmd) { $Py = $cmd.Source; break }
-    }
+# python: pick the first interpreter that can actually USE sqlcipher3.
+# A plain "does python exist" check is not enough: an alpha/beta build of a brand new
+# Python can import the module and then crash inside the C extension (access violation),
+# because prebuilt wheels target the FINAL ABI of that version. So we run a real probe.
+# The probe lives in its own file on purpose: PowerShell strips embedded double quotes
+# when passing arguments to a native command, which corrupts any inline `-c` version.
+$Probe = Join-Path $Root 'tools\sqlcipher_probe.py'
+
+function Test-PyCandidate($exe, $extra) {
+    if (-not $exe) { return $false }
+    if (-not (Test-Path $exe)) { return $false }
+    if (-not (Test-Path $Probe)) { return $false }
+    $out = & $exe @extra $Probe 2>&1
+    return ($LASTEXITCODE -eq 0 -and (($out -join ' ') -match 'PROBE_OK'))
 }
-if (-not $Py) {
-    $roots = @("$env:LOCALAPPDATA\Programs\Python", "$env:ProgramFiles", "C:\")
-    foreach ($r in $roots) {
-        if (-not (Test-Path $r)) { continue }
-        $hit = Get-ChildItem $r -Directory -Filter 'Python3*' -ErrorAction SilentlyContinue |
-               Sort-Object Name -Descending | Select-Object -First 1
-        if ($hit) {
-            $exe = Join-Path $hit.FullName 'python.exe'
-            if (Test-Path $exe) { $Py = $exe; break }
+
+$cands = @()
+if ($Python)     { $cands += ,@($Python, @()) }
+if ($env:PYTHON) { $cands += ,@($env:PYTHON, @()) }
+foreach ($c in @('python', 'python3')) {
+    $s = (Get-Command $c -ErrorAction SilentlyContinue).Source
+    if ($s) { $cands += ,@($s, @()) }
+}
+$pyLauncher = (Get-Command py -ErrorAction SilentlyContinue).Source
+if ($pyLauncher) {
+    # try pinned stable versions before whatever the launcher defaults to
+    foreach ($v in @('3.13', '3.12', '3.11', '3.10', '3.9')) { $cands += ,@($pyLauncher, @("-$v")) }
+    $cands += ,@($pyLauncher, @())
+}
+foreach ($r in @("$env:LOCALAPPDATA\Programs\Python", "$env:ProgramFiles", "C:\")) {
+    if (-not (Test-Path $r)) { continue }
+    Get-ChildItem $r -Directory -Filter 'Python3*' -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending | ForEach-Object {
+            $exe = Join-Path $_.FullName 'python.exe'
+            if (Test-Path $exe) { $cands += ,@($exe, @()) }
         }
+}
+
+function Get-PyVersion($exe, $extra) {
+    return (((& $exe @extra --version 2>&1) -join ' ').Trim())
+}
+
+$Py = $null; $PyArgs = @(); $rejected = @(); $stable = @()
+foreach ($c in $cands) {
+    $exe = $c[0]; $extra = @($c[1])
+    if (-not $exe) { continue }
+    if (-not (Test-Path $exe)) { continue }
+    if (Test-PyCandidate $exe $extra) { $Py = $exe; $PyArgs = $extra; break }
+    $ver = Get-PyVersion $exe $extra
+    $rejected += ("{0} {1}  [{2}]" -f $exe, ($extra -join ' '), $ver)
+    # only offer to install into real releases ("Python 3.12.10"), never alpha/beta builds
+    if ($ver -match '^Python \d+\.\d+\.\d+$') { $stable += ,@($exe, $extra) }
+}
+
+# Nothing worked yet - install the (single) dependency ourselves, one time.
+if (-not $Py -and $stable.Count -gt 0) {
+    $req = Join-Path $Root 'requirements.txt'
+    foreach ($c in $stable) {
+        $exe = $c[0]; $extra = @($c[1])
+        Step ("installing the sqlcipher3 dependency (one time) with " + (Get-PyVersion $exe $extra))
+        & $exe @extra -m pip install --disable-pip-version-check -i https://pypi.tuna.tsinghua.edu.cn/simple -r $req
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host '     mirror failed, retrying with the default index ...' -ForegroundColor Yellow
+            & $exe @extra -m pip install --disable-pip-version-check -r $req
+        }
+        if (Test-PyCandidate $exe $extra) { $Py = $exe; $PyArgs = $extra; break }
     }
 }
 if (-not $Py) {
-    Bad 'python not found.'
-    Write-Host '     Install Python 3.9+ (tick "Add python.exe to PATH"),'
-    Write-Host '     or set it explicitly:   $env:PYTHON = "C:\path\to\python.exe"'
+    Bad 'no usable Python + sqlcipher3 found.'
+    $uniq = $rejected | Select-Object -Unique
+    if ($uniq) { Write-Host '     tried:'; $uniq | ForEach-Object { Write-Host "       $_" } }
+    Write-Host ''
+    Write-Host '     How to fix (pick one):' -ForegroundColor Yellow
+    Write-Host '       1) install a STABLE Python (3.10 - 3.13 recommended) from python.org'
+    Write-Host '          then run:   py -3.12 -m pip install -r requirements.txt'
+    Write-Host '          (avoid alpha/beta builds - the wheel may load but then crash)'
+    Write-Host '       2) point at a working interpreter:'
+    Write-Host '            $env:PYTHON = "C:\path\to\python.exe"'
+    Write-Host '          or:'
+    Write-Host '            .\localize_phone.ps1 -Python "C:\path\to\python.exe"'
     exit 1
 }
-Ok "python = $Py"
+Ok ("python = {0} {1}" -f $Py, ($PyArgs -join ' '))
 
 $PackDb  = Join-Path $Root 'tools\patch_db.py'
 $PackCat = Join-Path $Root 'tools\patch_catalog.py'
@@ -121,12 +183,12 @@ Ok ('backup: {0:N1} MB' -f ((Get-Item $OrigDb).Length / 1MB))
 Step 'converting Traditional -> Simplified'
 $argsDb = @($PackDb, '--in', $OrigDb, '--out', $CnDb)
 if ($Key) { $argsDb += @('--key', $Key) }
-& $Py -u @argsDb 2>&1 | Select-Object -Last 5
+& $Py @PyArgs -u @argsDb 2>&1 | Select-Object -Last 5
 if (-not (Test-Path $CnDb)) { Bad 'conversion failed'; exit 1 }
 
 Step 'patching the catalog CRC32'
 $argsCat = @($PackCat, '--catalog', $OrigCat, '--db', $CnDb, '--out', $CnCat, '--expect-crc-db', $OrigDb)
-& $Py -u @argsCat 2>&1 | Select-String 'crc|CRC|written'
+& $Py @PyArgs -u @argsCat 2>&1 | Select-String 'crc|CRC|written'
 if (-not (Test-Path $CnCat)) { Bad 'catalog patch failed'; exit 1 }
 
 if ($DryRun) { Ok 'dry run: nothing was pushed'; exit 0 }
