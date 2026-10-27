@@ -5,34 +5,43 @@
 
 ---
 
-## 1. OpenCC 词库（已包含在仓库内）
+## 1. 原项目（本工具的前身）
 
 | 项 | 内容 |
 |---|---|
-| 文件 | `dict/TSCharacters.txt`、`dict/TSPhrases.txt`、`dict/TWPhrasesRev.txt` |
+| 来源 | [alisns1/blue-archive-gl-simplified](https://github.com/alisns1/blue-archive-gl-simplified) |
+| 许可证 | **MIT License**，Copyright (c) 2026 Blue Archive GL Simplified Chinese localization contributors |
+| 许可证全文 | [`licenses/blue-archive-gl-simplified-LICENSE.txt`](licenses/blue-archive-gl-simplified-LICENSE.txt) |
+| 说明 | 本工具在其「SQLCipher 打开 + FlatBuffer 内等长字节替换」的基础上现代化重构而来，原项目的思路与代码是本仓库的起点。 |
+
+---
+
+## 2. OpenCC 词库（已包含在仓库内）
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `src/batr/data/TSCharacters.txt`、`src/batr/data/TSPhrases.txt`、`src/batr/data/TWPhrasesRev.txt` |
 | 来源 | [BYVoid/OpenCC](https://github.com/BYVoid/OpenCC) — `data/dictionary/` |
 | 许可证 | **Apache License 2.0** |
 | 使用方式 | **原样复制，未作修改** |
-| 许可证全文 | [`dict/LICENSE-OpenCC.txt`](dict/LICENSE-OpenCC.txt) |
+| 许可证全文 | [`src/batr/data/LICENSE-OpenCC.txt`](src/batr/data/LICENSE-OpenCC.txt) |
 
-`tools/t2s.py` 只是这套词库的**读取与应用逻辑**（我们自己写的），词库数据本身版权归 OpenCC 项目所有。
+`src/batr/convert.py` 只是这套词库的**读取与应用逻辑**（我们自己写的），词库数据本身版权归 OpenCC 项目所有。
 
 ---
 
-## 2. TableCatalog 二进制布局（参考知识，代码为独立实现）
+## 3. CRC32 追加修正（已包含在仓库内）
 
 | 项 | 内容 |
 |---|---|
-| 来源 | [asfu222/BlueArchiveLocalizationTools](https://github.com/asfu222/BlueArchiveLocalizationTools) — `assistance/patch_table_catalog.py` |
-| 许可证 | **MIT License**，Copyright (c) 2025 anon |
-| 使用方式 | 参考其**条目字段顺序**（`i8 / i32 / name / i64 crc / bool / includes`）来定位 CRC 字段。 |
-| 说明 | `tools/patch_catalog.py` 为**独立实现**（基于字节模式定位，而非顺序解析整个 catalog），未复制其源代码。 |
-
-> MIT 许可证允许参考与再实现，要求保留版权与许可声明 —— 即本文件。
+| 文件 | `src/batr/utils/crc.py` |
+| 来源 | [BA-Modding-Toolkit（BAMT）](https://github.com/Agent-0808/BA-Modding-Toolkit) — `src/ba_modding_toolkit/utils/crc.py` |
+| 许可证 | **GNU GPL-3.0**（本仓库因此整体以 GPL-3.0 分发，见根目录 `LICENSE`） |
+| 使用方式 | `patch.py` 在输出文件末尾追加 4 字节，使整体 CRC32 等于原文件值，从而替代旧的 catalog 改写。 |
 
 ---
 
-## 3. SQLCipher 参数与密钥（事实性信息，未包含其代码）
+## 4. SQLCipher 参数与密钥（事实性信息，未包含其代码）
 
 | 项 | 内容 |
 |---|---|
@@ -52,17 +61,17 @@
 
 ---
 
-## 4. 运行时依赖（未包含在仓库内，由用户自行安装）
+## 5. 运行时依赖（未包含在仓库内，由用户自行安装）
 
 | 包 | 许可证 | 用途 |
 |---|---|---|
 | [`sqlcipher3-wheels`](https://pypi.org/project/sqlcipher3-wheels/) | 见 PyPI 页面（SQLCipher 本体为 BSD 风格） | 打开/写入 SQLCipher 加密的 SQLite 库 |
 
-安装方式见 `requirements.txt`。依赖的许可证随其发行包一并提供，本仓库不再重复分发。
+安装方式见 `pyproject.toml`（`uv sync`）。依赖的许可证随其发行包一并提供，本仓库不再重复分发。
 
 ---
 
-## 5. 其他参考（思路借鉴，未使用其代码）
+## 6. 其他参考（思路借鉴，未使用其代码）
 
 | 项目 | 许可证 | 借鉴内容 |
 |---|---|---|
@@ -74,8 +83,9 @@
 
 ## 如果你要复用本仓库
 
-- 本仓库自有代码：**MIT**（见 [`LICENSE`](LICENSE)）
-- `dict/` 下词库：**Apache-2.0**（保留 `dict/LICENSE-OpenCC.txt` 即可）
-- 上面第 2、3 项的署名请一并保留
+- 本仓库（含自有代码与 `src/batr/utils/crc.py`）：**GPL-3.0**（见 [`LICENSE`](LICENSE)）
+- 原项目的 MIT 许可证与署名：见第 1 节，请一并保留
+- `src/batr/data/` 下词库：**Apache-2.0**（保留 `src/batr/data/LICENSE-OpenCC.txt` 即可）
+- 上面第 3、4 节的署名请一并保留
 
 如发现署名有遗漏或不当，欢迎提 Issue 或 PR 指出，我们会立刻更正。

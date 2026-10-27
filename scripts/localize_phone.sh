@@ -1,25 +1,30 @@
 #!/usr/bin/env bash
 # Blue Archive GL: Traditional Chinese -> Simplified Chinese, on-device (Linux / macOS / WSL).
 #
+# OPTIONAL helper (pull / convert / push via adb). The converter itself is `batr patch`,
+# which fixes the CRC32 of the output database in place (appends 4 bytes), so the
+# TableCatalog.bytes rewrite step is gone entirely.
+#
 # Usage:
 #   ./localize_phone.sh                 # auto-pick the first non-emulator device
 #   ./localize_phone.sh <serial>        # target a specific device
-#   DRY_RUN=1 ./localize_phone.sh       # pull + convert + patch catalog, do not push
+#   DRY_RUN=1 ./localize_phone.sh       # pull + convert, do not push
 #   BA_KEY=<hex> ./localize_phone.sh    # override the SQLCipher key
 #
-# Requirements: adb in PATH, python3 with `pip install -r requirements.txt`.
+# Requirements: uv (https://docs.astral.sh/uv/) and adb in PATH.
 set -euo pipefail
 
 PKG=com.nexon.bluearchive
 BASE="/sdcard/Android/data/$PKG/files/PUB/Resource"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Repo root = parent of the scripts/ directory this file lives in.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$ROOT/work"
 ADB="${ADB:-adb}"
-PY="${PYTHON:-python3}"
+UV="${UV:-uv}"
 DRY_RUN="${DRY_RUN:-0}"
 
 command -v "$ADB" >/dev/null || { echo "!! adb not found in PATH"; exit 1; }
-command -v "$PY"  >/dev/null || { echo "!! python3 not found in PATH"; exit 1; }
+command -v "$UV"  >/dev/null || { echo "!! uv not found (https://docs.astral.sh/uv/)"; exit 1; }
 
 echo "=== locating device ==="
 "$ADB" start-server >/dev/null 2>&1 || true
@@ -40,32 +45,24 @@ echo "  [ok] device = $DEV"
 
 mkdir -p "$WORK"
 ORIG_DB="$WORK/ExcelDB.orig.db"
-ORIG_CAT="$WORK/TableCatalog.orig.bytes"
 CN_DB="$WORK/ExcelDB.cn.db"
-CN_CAT="$WORK/TableCatalog.cn.bytes"
 
-echo "=== stopping the game and pulling the current files (backup kept) ==="
+echo "=== stopping the game and pulling the current database (backup kept) ==="
 "$ADB" -s "$DEV" shell "am force-stop $PKG" >/dev/null 2>&1 || true
 "$ADB" -s "$DEV" pull "$BASE/Preload/TableBundles/ExcelDB.db" "$ORIG_DB"
-"$ADB" -s "$DEV" pull "$BASE/Catalog/TableBundles/TableCatalog.bytes" "$ORIG_CAT"
 
-echo "=== converting Traditional -> Simplified ==="
+echo "=== converting Traditional -> Simplified (batr patch: conversion + CRC fix) ==="
 KEY_ARGS=()
 [ -n "${BA_KEY:-}" ] && KEY_ARGS=(--key "$BA_KEY")
-"$PY" -u "$ROOT/tools/patch_db.py" --in "$ORIG_DB" --out "$CN_DB" "${KEY_ARGS[@]}"
-
-echo "=== patching the catalog CRC32 ==="
-"$PY" -u "$ROOT/tools/patch_catalog.py" --catalog "$ORIG_CAT" --db "$CN_DB" \
-      --out "$CN_CAT" --expect-crc-db "$ORIG_DB"
+(cd "$ROOT" && "$UV" run batr patch --db "$ORIG_DB" --out "$CN_DB" --verify "${KEY_ARGS[@]}")
 
 if [ "$DRY_RUN" != "0" ]; then
     echo "=== dry run: nothing pushed ==="
     exit 0
 fi
 
-echo "=== pushing the patched files back ==="
+echo "=== pushing the patched database back (catalog untouched: CRC already matches) ==="
 "$ADB" -s "$DEV" push "$CN_DB" "$BASE/Preload/TableBundles/ExcelDB.db"
-"$ADB" -s "$DEV" push "$CN_CAT" "$BASE/Catalog/TableBundles/TableCatalog.bytes"
 
 cat <<EOF
 
@@ -75,5 +72,5 @@ Launch the game; the UI and story text should now be Simplified Chinese.
 Notes:
   * Re-run after every game update (the database changes).
   * Do not use the in-game repair / redownload button; it restores the original files.
-  * Original files are backed up in: $WORK
+  * Original file is backed up at: $ORIG_DB
 EOF
