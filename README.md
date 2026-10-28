@@ -84,7 +84,7 @@ batr crc-fix 给任意文件追加 4 字节修正，使其 CRC32 等于目标值
 |---|---|
 | 打不开数据库（wrong key） | 游戏大版本更新换了密钥 → `--key` 覆盖 |
 | 转换完少数词仍是台式 | 词库覆盖面问题，欢迎 PR 补词（改 `src/batr/data/`） |
-| 某些字大小/粗细不统一 | 字体回退问题，详见 [docs/字体问题.md](docs/字体问题.md)，不影响功能 |
+| 某些字大小/粗细不统一 | 用 [BA-Font-Replacer](https://github.com/Agent-0808/BA-Font-Replacer) 替换字体即可，详见 [docs/字体问题.md](docs/字体问题.md) |
 | 进游戏又变回繁体了 | 点了游戏内「资源修复 / 重新下载」→ 重新执行即可 |
 | 游戏更新后要重跑 | 库变了 → 重新拉取并跑 `batr patch`（对输出 CRC 自动对齐新库） |
 
@@ -163,14 +163,13 @@ Re-run after each game update. Optional adb helpers live in `scripts/`.
 
 ---
 
-## 已知问题：部分字形的大小 / 粗细不统一
+## 字体观感问题
 
-汉化后**被改动过的字**比繁简同形的字看起来更细或更小。完整 8 轮实测与结论见
-**[docs/字体问题.md](docs/字体问题.md)**。
+汉化后**被改动过的字**可能比繁简同形的字看起来更细或更小（根因分析见[docs/字体问题.md](docs/字体问题.md)）。
 
-- GL 安卓端内置的 `NotoSansTC` 字体**缺简体独有字形**，且不在 UI 渲染路径上，无法替换；
-- 不 root、不改客户端的前提下**无法根治**；设置 App / 系统语言为简体可**减轻**；
-- **不影响任何功能**，文本内容 100% 正确。
+**已解决**：使用 [BA-Font-Replacer](https://github.com/Agent-0808/BA-Font-Replacer)
+把客户端的繁体字体（TW 字体）替换为**思源黑体 SC 的 Medium 与 Bold** 两个字重即可，
+简体字形将全部由同一款字体渲染，观感完全统一。
 
 ---
 
