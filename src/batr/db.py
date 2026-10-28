@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from pathlib import Path
 
 import sqlcipher3
 
 
-def connect(path: str, key: str) -> sqlite3.Connection:
+def connect(path: str | Path, key: str) -> sqlite3.Connection:
     """打开 SQLCipher 加密的库并验证密钥（打不开会抛 sqlite3.DatabaseError）。"""
     con = sqlcipher3.connect(path)
     cur = con.cursor()

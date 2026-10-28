@@ -104,6 +104,9 @@ def main() -> None:
         name = (st.get("name") or "").strip() or (st.get("name_cn") or "").strip()
         if tw and name:
             add(given(tw), given(name))
+            # 全名连写规则
+            if " " in tw:
+                add(tw.replace(" ", ""), name.replace(" ", ""))
         # 皮肤名（exact 无误伤风险；仅民间名与 t2s 不同时才需要词条）
         for page in st.get("pages", []):
             skin_tw = (page.get("skin_tw") or "").strip()

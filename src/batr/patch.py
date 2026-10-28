@@ -22,6 +22,7 @@ import shutil
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from . import db
 from .config import DEFAULT_CONVERT, DEFAULT_KEY, DEFAULT_TABLE_PATTERN
@@ -58,8 +59,8 @@ def _make_transform(conv: Converter | None, glossary: Glossary | None) -> Callab
 
 
 def patch_database(
-    src: str,
-    dst: str,
+    src: Path,
+    dst: Path,
     *,
     key: str = DEFAULT_KEY,
     convert: str = DEFAULT_CONVERT,
@@ -79,6 +80,7 @@ def patch_database(
     glossary: 译名对照表（先于 OpenCC 匹配，键为繁体原文）。
     dry_run 时直接只读打开 src 统计，不写任何文件。
     """
+    src, dst = Path(src), Path(dst)  # 兼容 str 入参
     if not os.path.exists(src):
         raise FileNotFoundError(f"输入不存在: {src}")
     if not dry_run and os.path.abspath(src) == os.path.abspath(dst):
@@ -106,8 +108,9 @@ def patch_database(
             mode = "exact" if old in glossary.exact_map else "sub"
             log(f"  glossary[{old} -> {new}] mode={mode} hits={glossary.hits[old]}")
 
-    work = dst + ".tmp" if not dry_run else src
+    work = dst.with_name(dst.name + ".tmp") if not dry_run else src
     if not dry_run:
+        dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, work)
 
     try:

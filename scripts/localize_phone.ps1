@@ -22,6 +22,7 @@ $Root   = Split-Path -Parent $PSScriptRoot
 $Pkg    = 'com.nexon.bluearchive'
 $Base   = "/sdcard/Android/data/$Pkg/files/PUB/Resource"
 $Work   = Join-Path $Root 'work'
+$Out    = Join-Path $Root 'output'
 
 function Step($m) { Write-Host ''; Write-Host "=== $m ===" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  [ok] $m" -ForegroundColor Green }
@@ -91,8 +92,9 @@ if (-not $Dev) { Bad 'no device. Connect the phone over USB with USB debugging e
 Ok "device = $Dev"
 
 New-Item -ItemType Directory -Force $Work | Out-Null
+New-Item -ItemType Directory -Force $Out | Out-Null
 $OrigDb = Join-Path $Work 'ExcelDB.orig.db'
-$CnDb   = Join-Path $Work 'ExcelDB.cn.db'
+$CnDb   = Join-Path $Out 'ExcelDB.cn.db'
 
 # ---------------------------------------------------------------- pull
 Step 'stopping the game and pulling the current database (kept as backup)'
@@ -102,8 +104,8 @@ if (-not (Test-Path $OrigDb)) { Bad 'pull failed'; exit 1 }
 Ok ('backup: {0:N1} MB' -f ((Get-Item $OrigDb).Length / 1MB))
 
 # ---------------------------------------------------------------- convert
-Step 'converting Traditional -> Simplified (batr patch: conversion + CRC fix, no catalog step)'
-$argsBatr = @('run', 'batr', 'patch', '--db', $OrigDb, '--out', $CnDb, '--verify')
+Step 'converting Traditional -> Simplified (batr: conversion + CRC fix, no catalog step)'
+$argsBatr = @('run', 'batr', $OrigDb, '--out', $CnDb, '--verify')
 if ($Key) { $argsBatr += @('--key', $Key) }
 & $Uv @argsBatr 2>&1 | Select-Object -Last 6
 if (-not (Test-Path $CnDb)) { Bad 'conversion failed'; exit 1 }

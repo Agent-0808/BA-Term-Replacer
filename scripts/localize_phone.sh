@@ -19,6 +19,7 @@ BASE="/sdcard/Android/data/$PKG/files/PUB/Resource"
 # Repo root = parent of the scripts/ directory this file lives in.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$ROOT/work"
+OUT="$ROOT/output"
 ADB="${ADB:-adb}"
 UV="${UV:-uv}"
 DRY_RUN="${DRY_RUN:-0}"
@@ -43,18 +44,18 @@ fi
 [ -n "$DEV" ] || { echo "!! no device connected (enable USB debugging)"; exit 1; }
 echo "  [ok] device = $DEV"
 
-mkdir -p "$WORK"
+mkdir -p "$WORK" "$OUT"
 ORIG_DB="$WORK/ExcelDB.orig.db"
-CN_DB="$WORK/ExcelDB.cn.db"
+CN_DB="$OUT/ExcelDB.cn.db"
 
 echo "=== stopping the game and pulling the current database (backup kept) ==="
 "$ADB" -s "$DEV" shell "am force-stop $PKG" >/dev/null 2>&1 || true
 "$ADB" -s "$DEV" pull "$BASE/Preload/TableBundles/ExcelDB.db" "$ORIG_DB"
 
-echo "=== converting Traditional -> Simplified (batr patch: conversion + CRC fix) ==="
+echo "=== converting Traditional -> Simplified (batr: conversion + CRC fix) ==="
 KEY_ARGS=()
 [ -n "${BA_KEY:-}" ] && KEY_ARGS=(--key "$BA_KEY")
-(cd "$ROOT" && "$UV" run batr patch --db "$ORIG_DB" --out "$CN_DB" --verify "${KEY_ARGS[@]}")
+(cd "$ROOT" && "$UV" run batr "$ORIG_DB" --out "$CN_DB" --verify "${KEY_ARGS[@]}")
 
 if [ "$DRY_RUN" != "0" ]; then
     echo "=== dry run: nothing pushed ==="

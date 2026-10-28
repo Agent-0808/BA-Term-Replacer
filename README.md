@@ -22,34 +22,31 @@
 uv sync
 
 # 只看会改什么，不写任何文件
-uv run batr patch --db ExcelDB.db --dry-run
+uv run batr ExcelDB.db --dry-run
 
-# 转换 + CRC 修正，产出可直接使用的库
-uv run batr patch --db ExcelDB.db --out ExcelDB.cn.db --verify
+# 转换 + CRC 修正，产出可直接使用的库（省略 --out 时写到 output/ExcelDB.db）
+uv run batr ExcelDB.db --out output/ExcelDB.cn.db --verify
 ```
 
-把 `--db` 换成你从设备拉出的 `ExcelDB.db`（放在 `/sdcard/Android/data/com.nexon.bluearchive/files/PUB/Resource/Preload/TableBundles/`），
+把 `db` 换成你从设备拉出的 `ExcelDB.db`（放在 `/sdcard/Android/data/com.nexon.bluearchive/files/PUB/Resource/Preload/TableBundles/`），
 完成后把 `--out` 的产物放回同一路径即可。`--verify` 会对输出跑 `PRAGMA integrity_check`。
 
 ### 命令一览
 
 ```
-batr patch   字段级文本补丁（支持变长替换）+ CRC 追加修正
-  --db <文件>        输入 ExcelDB.db（不会被修改）
-  --out <文件>       输出库（CRC32 与输入一致）
+batr <db>   字段级文本补丁（支持变长替换）+ CRC 追加修正
+  db                输入 ExcelDB.db（位置参数，不会被修改）
+  --out <文件>       输出库（CRC32 与输入一致；默认 output/<输入文件名>）
   --convert <模式>   tw2sp 含台湾用词转换（伺服器->服务器），t2s 只转字形，
                      none 只做替换表（默认 tw2sp）
   --convert-kana     不跳过含假名的字段（默认跳过：日文列在 GL 是死数据）
   --tables <正则>    限定要处理的表（默认 Localize|Dialog|Scenario|...）
   --extra-bytes HEX  CRC 修正前附加到输出末尾的自定义字节（hex，如 DEADBEEF）
-  --names TSV        角色名表（exact 整字段匹配），默认 glossary/names.tsv，可重复传入
-  --text TSV         正文替换表（sub 子串匹配），默认 glossary/text.tsv，可重复传入
+  --names TSV...     角色名表（exact 整字段匹配），默认 glossary/names.tsv，空格分隔可传多个
+  --text TSV...      正文替换表（sub 子串匹配），默认 glossary/text.tsv，空格分隔可传多个
   --key <hex>        覆盖 SQLCipher 密钥（游戏换密钥时用）
   --dry-run          只统计，不写任何文件
   --verify           输出库跑 integrity_check
-
-batr crc-fix 给任意文件追加 4 字节修正，使其 CRC32 等于目标值（排查用）
-  --in <文件> --out <文件> --target-from <基准文件> | --target-crc <8位hex>
 ```
 
 ### 可选：adb 一键脚本（不保证维护）

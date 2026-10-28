@@ -15,3 +15,6 @@ CONVERT_MODES = ("tw2sp", "t2s", "none")
 # names.tsv 角色名表（exact 整字段匹配），text.tsv 正文替换表（sub 子串匹配）。
 DEFAULT_NAMES_GLOSSARY = "glossary/names.tsv"
 DEFAULT_TEXT_GLOSSARY = "glossary/text.tsv"
+
+# 输出目录：省略 --out 时，输出库写到 <该目录>/<输入文件名>。
+DEFAULT_OUT_DIR = "output"
