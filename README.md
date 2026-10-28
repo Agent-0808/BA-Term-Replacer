@@ -42,7 +42,8 @@ batr patch   字段级文本补丁（支持变长替换）+ CRC 追加修正
   --convert-kana     不跳过含假名的字段（默认跳过：日文列在 GL 是死数据）
   --tables <正则>    限定要处理的表（默认 Localize|Dialog|Scenario|...）
   --extra-bytes HEX  CRC 修正前附加到输出末尾的自定义字节（hex，如 DEADBEEF）
-  --glossary TSV     译名对照表（繁体旧词<TAB>新词，匹配先于 OpenCC），可重复传入
+  --names TSV        角色名表（exact 整字段匹配），默认 glossary/names.tsv，可重复传入
+  --text TSV         正文替换表（sub 子串匹配），默认 glossary/text.tsv，可重复传入
   --key <hex>        覆盖 SQLCipher 密钥（游戏换密钥时用）
   --dry-run          只统计，不写任何文件
   --verify           输出库跑 integrity_check

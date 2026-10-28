@@ -48,7 +48,7 @@ class PatchStats:
 
 
 def _make_transform(conv: Converter | None, glossary: Glossary | None) -> Callable[[str], str | None]:
-    """文本改写链：先套译名对照表（键为繁体原文），再做 OpenCC 繁->简（见 glossary.py）。"""
+    """文本改写链：先套译名对照表（names 整字段 / text 子串），再做 OpenCC 繁->简。"""
     def transform(text: str) -> str | None:
         new = glossary.apply(text) if glossary else text
         if conv is not None:
@@ -90,7 +90,7 @@ def patch_database(
     else:
         log("convert=none（只做译名对照表）")
     if glossary is not None:
-        log(f"glossary: {len(glossary.rules)} 条规则")
+        log(f"glossary: names={len(glossary.exact_map)} 条  text={len(glossary.sub_map)} 条")
     transform = _make_transform(conv, glossary)
     log(f"kana-skip={'on' if skip_kana else 'off'}")
 
@@ -101,8 +101,10 @@ def patch_database(
         """逐规则命中数：零命中 = 拼错/过期词条的主要排查线索。"""
         if glossary is None:
             return
-        for old, new in glossary.rules.items():
-            log(f"  glossary[{old} -> {new}] hits={glossary.hits[old]}")
+        for old in list(glossary.exact_map) + list(glossary.sub_map):
+            new = glossary.exact_map.get(old) or glossary.sub_map.get(old, "")
+            mode = "exact" if old in glossary.exact_map else "sub"
+            log(f"  glossary[{old} -> {new}] mode={mode} hits={glossary.hits[old]}")
 
     work = dst + ".tmp" if not dry_run else src
     if not dry_run:

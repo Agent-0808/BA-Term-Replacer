@@ -7,7 +7,7 @@ import shutil
 import sys
 
 from . import __version__, patch as patch_mod
-from .config import DEFAULT_CONVERT, DEFAULT_KEY, DEFAULT_TABLE_PATTERN, CONVERT_MODES
+from .config import DEFAULT_CONVERT, DEFAULT_KEY, DEFAULT_NAMES_GLOSSARY, DEFAULT_TABLE_PATTERN, DEFAULT_TEXT_GLOSSARY, CONVERT_MODES
 from .glossary import Glossary
 from .utils import crc
 
@@ -36,9 +36,14 @@ def _cmd_patch(args: argparse.Namespace) -> int:
                 print("--extra-bytes 需要偶数长度的 hex 字符串，如 DEADBEEF")
                 return 1
     glossary: Glossary | None = None
-    if args.glossary:
+    names_paths = args.names if args.names is not None else [DEFAULT_NAMES_GLOSSARY]
+    text_paths = args.text if args.text is not None else [DEFAULT_TEXT_GLOSSARY]
+    if any(os.path.exists(p) for p in names_paths + text_paths):
         try:
-            glossary = Glossary.load(args.glossary)
+            glossary = Glossary.load(
+                [p for p in names_paths if os.path.exists(p)],
+                [p for p in text_paths if os.path.exists(p)],
+            )
         except OSError as exc:
             print(f"无法读取词表: {exc}")
             return 1
@@ -110,8 +115,10 @@ def main(argv: list[str] | None = None) -> int:
                          help="限定要处理的表名正则")
     p_patch.add_argument("--extra-bytes", default=0x08080808, metavar="HEX",
                          help="CRC 修正前附加到输出末尾的自定义字节（hex，如 DEADBEEF；默认 08080808）")
-    p_patch.add_argument("--glossary", action="append", metavar="TSV",
-                         help="译名对照表（TSV：繁体旧词<TAB>新词），可重复传入")
+    p_patch.add_argument("--names", action="append", metavar="TSV",
+                         help="角色名表（exact 整字段匹配），默认 glossary/names.tsv，可重复传入")
+    p_patch.add_argument("--text", action="append", metavar="TSV",
+                         help="正文替换表（sub 子串匹配），默认 glossary/text.tsv，可重复传入")
     p_patch.add_argument("--dry-run", action="store_true",
                          help="只统计会改什么，不写任何文件")
     p_patch.add_argument("--verify", action="store_true",

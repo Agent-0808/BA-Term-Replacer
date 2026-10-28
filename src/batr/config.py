@@ -10,3 +10,8 @@ DEFAULT_TABLE_PATTERN = r"Localize|Dialog|Scenario|Subtitle|Talk|Mail|Name|Emoji
 # none 只做替换表、不转字形（繁->繁民译用，替换表在阶段 C 接入）。
 DEFAULT_CONVERT = "tw2sp"
 CONVERT_MODES = ("tw2sp", "t2s", "none")
+
+# 译名对照表默认路径（glossary/ 单层布局）：
+# names.tsv 角色名表（exact 整字段匹配），text.tsv 正文替换表（sub 子串匹配）。
+DEFAULT_NAMES_GLOSSARY = "glossary/names.tsv"
+DEFAULT_TEXT_GLOSSARY = "glossary/text.tsv"
