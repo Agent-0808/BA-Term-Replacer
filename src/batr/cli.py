@@ -7,7 +7,8 @@ import shutil
 import sys
 
 from . import __version__, patch as patch_mod
-from .config import DEFAULT_CONVERT_MODE, DEFAULT_KEY, DEFAULT_TABLE_PATTERN, CONVERT_MODES
+from .config import DEFAULT_CONVERT, DEFAULT_KEY, DEFAULT_TABLE_PATTERN, CONVERT_MODES
+from .glossary import Glossary
 from .utils import crc
 
 
@@ -24,12 +25,32 @@ def _cmd_patch(args: argparse.Namespace) -> int:
     if not args.out and not args.dry_run:
         print("需要 --out <输出文件>（--dry-run 时可省略）")
         return 1
+    extra: bytes | None = None
+    if args.extra_bytes is not None:
+        if isinstance(args.extra_bytes, int):  # 代码内默认值直接写 int（如 0x08080808）
+            extra = args.extra_bytes.to_bytes(4, "big")
+        else:
+            try:
+                extra = bytes.fromhex(args.extra_bytes.removeprefix("0x"))
+            except ValueError:
+                print("--extra-bytes 需要偶数长度的 hex 字符串，如 DEADBEEF")
+                return 1
+    glossary: Glossary | None = None
+    if args.glossary:
+        try:
+            glossary = Glossary.load(args.glossary)
+        except OSError as exc:
+            print(f"无法读取词表: {exc}")
+            return 1
     patch_mod.patch_database(
         args.db,
         args.out or "",
         key=args.key,
-        mode=args.mode,
+        convert=args.convert,
+        skip_kana=not args.convert_kana,
         tables=args.tables,
+        extra_bytes=extra,
+        glossary=glossary,
         dry_run=args.dry_run,
         verify=args.verify,
     )
@@ -77,14 +98,20 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_patch = sub.add_parser(
-        "patch", help="繁->简转换 + CRC 追加修正（产出可直接使用的库，无需改 catalog）")
+        "patch", help="字段级文本补丁（支持变长替换）+ CRC 追加修正（产出可直接使用的库）")
     p_patch.add_argument("--db", required=True, help="输入 ExcelDB.db（不会被修改）")
     p_patch.add_argument("--out", default=None, help="输出库（另存，CRC32 与输入一致；--dry-run 时可省略）")
     p_patch.add_argument("--key", default=DEFAULT_KEY, help="32 字节 SQLCipher 密钥（hex）")
-    p_patch.add_argument("--mode", default=DEFAULT_CONVERT_MODE, choices=CONVERT_MODES,
-                         help="tw2sp 含台湾用词转换，t2s 只转字形")
+    p_patch.add_argument("--convert", default=DEFAULT_CONVERT, choices=CONVERT_MODES,
+                         help="tw2sp 含台湾用词转换，t2s 只转字形，none 只做替换表")
+    p_patch.add_argument("--convert-kana", action="store_true",
+                         help="不跳过含假名的字段（默认跳过：日文列在 GL 是死数据）")
     p_patch.add_argument("--tables", default=DEFAULT_TABLE_PATTERN,
                          help="限定要处理的表名正则")
+    p_patch.add_argument("--extra-bytes", default=0x08080808, metavar="HEX",
+                         help="CRC 修正前附加到输出末尾的自定义字节（hex，如 DEADBEEF；默认 08080808）")
+    p_patch.add_argument("--glossary", action="append", metavar="TSV",
+                         help="译名对照表（TSV：繁体旧词<TAB>新词），可重复传入")
     p_patch.add_argument("--dry-run", action="store_true",
                          help="只统计会改什么，不写任何文件")
     p_patch.add_argument("--verify", action="store_true",

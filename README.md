@@ -34,11 +34,15 @@ uv run batr patch --db ExcelDB.db --out ExcelDB.cn.db --verify
 ### 命令一览
 
 ```
-batr patch   繁->简转换 + CRC 追加修正
+batr patch   字段级文本补丁（支持变长替换）+ CRC 追加修正
   --db <文件>        输入 ExcelDB.db（不会被修改）
   --out <文件>       输出库（CRC32 与输入一致）
-  --mode tw2sp|t2s   tw2sp 含台湾用词转换（伺服器->服务器），t2s 只转字形（默认 tw2sp）
+  --convert <模式>   tw2sp 含台湾用词转换（伺服器->服务器），t2s 只转字形，
+                     none 只做替换表（默认 tw2sp）
+  --convert-kana     不跳过含假名的字段（默认跳过：日文列在 GL 是死数据）
   --tables <正则>    限定要处理的表（默认 Localize|Dialog|Scenario|...）
+  --extra-bytes HEX  CRC 修正前附加到输出末尾的自定义字节（hex，如 DEADBEEF）
+  --glossary TSV     译名对照表（繁体旧词<TAB>新词，匹配先于 OpenCC），可重复传入
   --key <hex>        覆盖 SQLCipher 密钥（游戏换密钥时用）
   --dry-run          只统计，不写任何文件
   --verify           输出库跑 integrity_check
