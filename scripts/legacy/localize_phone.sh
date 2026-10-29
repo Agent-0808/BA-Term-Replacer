@@ -16,8 +16,8 @@ set -euo pipefail
 
 PKG=com.nexon.bluearchive
 BASE="/sdcard/Android/data/$PKG/files/PUB/Resource"
-# Repo root = parent of the scripts/ directory this file lives in.
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Repo root = grandparent of the scripts/legacy/ directory this file lives in.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORK="$ROOT/work"
 OUT="$ROOT/output"
 ADB="${ADB:-adb}"

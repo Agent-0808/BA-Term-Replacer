@@ -17,8 +17,8 @@ $ErrorActionPreference = 'Continue'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 try { $OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
-# Repo root = parent of the scripts/ directory this file lives in.
-$Root   = Split-Path -Parent $PSScriptRoot
+# Repo root = grandparent of the scripts/legacy/ directory this file lives in.
+$Root   = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $Pkg    = 'com.nexon.bluearchive'
 $Base   = "/sdcard/Android/data/$Pkg/files/PUB/Resource"
 $Work   = Join-Path $Root 'work'
