@@ -20,5 +20,8 @@ dist/
 Thumbs.db
 desktop.ini
 
-glossary/
+# glossary/：自动产物与个人词表不入库；共享数据（客观黑名单、通用专名表）跟踪
+glossary/*
+!glossary/blacklist.txt
+!glossary/terms.tsv
 output/

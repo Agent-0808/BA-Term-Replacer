@@ -1,0 +1,52 @@
+# 黑名单（客观项，入库共享）：生成脚本导入 students.json 时跳过这些词条
+# 格式：一行一个繁体键；可选第二列限定生效表（names = 只跳过角色名表，text = 只跳过正文替换表），不写则两表都跳过
+# 个人喜好类请写 glossary/blacklist.local.txt（不入库）
+
+# 通用词皮肤名：
+武裝	text
+導覽員	text
+魔法少女	text
+
+# 从数据源获取但非角色名，易误伤：
+Mk.0
+
+# 与普通词同形的角色名：整字段匹配保留（角色名表照常生成），仅正文子串替换跳过，避免误伤
+# 两字名（与普通词冲突）：
+未來	text
+希望	text
+月夜	text
+
+# 单字名（单字子串替换必误伤普通词）：
+光	text
+冬	text
+堇	text
+夏	text
+夢	text
+季	text
+律	text
+惠	text
+憂	text
+新	text
+旬	text
+昴	text
+晴	text
+晶	text
+李	text
+梓	text
+椿	text
+楓	text
+步	text
+泉	text
+渚	text
+琳	text
+碧	text
+空	text
+紫	text
+紬	text
+綠	text
+翼	text
+莉	text
+萌	text
+薊	text
+誡	text
+響	text

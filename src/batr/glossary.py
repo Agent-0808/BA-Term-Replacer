@@ -39,9 +39,11 @@ class Glossary:
                     continue
                 parts = line.split("\t")
                 if len(parts) < 2 or not parts[0].strip() or not parts[1]:
-                    print(f"[glossary] {path}:{ln} 跳过无效行（需要：旧词<TAB>新词）")
+                    print(f"[glossary] {path}:{ln} 跳过无效行（需要「旧词<TAB>新词」，分隔符是 Tab，不是空格）")
                     continue
                 old, new = parts[0].strip(), parts[1]
+                if old == new:
+                    continue  # 恒等行：模板里「待填」的占位，无实际改动，跳过以免淹没命中日志
                 if old in target:  # 同一张表内先出现者优先；同名键允许跨表（exact/sub 各司其职）
                     print(f"[glossary] {path}:{ln} 重复键 {old!r}，保留先出现的")
                     continue

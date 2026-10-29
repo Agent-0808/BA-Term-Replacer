@@ -49,9 +49,38 @@ batr <db>   字段级文本补丁（支持变长替换）+ CRC 追加修正
   --verify           输出库跑 integrity_check
 ```
 
+### 繁中 → 繁中民译（只换译名，不转简体）
+
+`--convert none` 关闭字形转换、只套词表，产物仍是繁体：
+
+```bash
+# 先预览：逐规则 hits=0 的条目多半是键写错或词条过期
+uv run batr ExcelDB.db --convert none \
+  --names glossary/names_custom.tsv --text glossary/text_custom.tsv --dry-run
+
+# 正式产出
+uv run batr ExcelDB.db --convert none \
+  --names glossary/names_custom.tsv --text glossary/text_custom.tsv --out output/ExcelDB.tw.db
+```
+
+务必显式传 `--names` / `--text`：默认的 `glossary/names.tsv` / `text.tsv`（及 `.local` 变体）值是简体，不覆盖会把文本转成简体。
+
+词表（`glossary/` 自动产物与个人词表不入库；仅 `blacklist.txt`（客观禁用）与 `terms.tsv`（通用专名）跟踪）：
+
+```bash
+uv run python scripts/make_kivowiki_names.py   # names.tsv / text.tsv：kivowiki 古书馆民译（繁->简流程用）
+uv run python scripts/make_name_template.py    # names_custom.tsv / text_custom.tsv：繁->繁模板，右列自己填
+```
+
+- `names.tsv` / `text.tsv` 是**纯自动产物，每次完整重新生成**，不含任何手工内容，不要直接编辑。个人补充/修正写 `glossary/names.local.tsv` / `glossary/text.local.tsv`（本地、不入库，首次运行自动建空模板）；CLI 默认把它们排在自动表**之前**加载，重复键以先出现的为准，即个人条目优先。
+- 禁用某个自动键写黑名单：`glossary/blacklist.local.txt`（个人、不入库，首次运行自动建模板）或 `glossary/blacklist.txt`（客观、入库）。默认两表都排除；写第二列可限定生效表：`希望<TAB>text` = 角色名表照常生成、正文子串替换跳过（防止误伤普通词），`键<TAB>names` 反之。
+- `glossary/terms.tsv`（入库共享）放地名/组织/术语的社区通用民译（如 `奇普托斯<TAB>基沃托斯`），只做 sub 匹配；文件存在时 CLI **始终自动加载**，个人表同名键优先。
+- `names_custom.tsv` 是恒等行模板（`彌香<TAB>彌香`），右列与左列相同 = 未填写，加载时自动跳过，不会产生任何替换。
+- 键必须写数据库里的**繁体原文**，分隔符是 Tab 不是空格；值写译文即可（繁->繁用繁体，繁->简流程最终由 OpenCC 转简体）。
+
 ### 可选：adb 一键脚本（不保证维护）
 
-`scripts/运行.bat` / `scripts/localize_phone.ps1` / `scripts/localize_phone.sh`：
+`scripts/legacy/运行.bat` / `scripts/legacy/localize_phone.ps1` / `scripts/legacy/localize_phone.sh`：
 自动「停游戏 → 拉库（备份到 work/）→ `batr patch` → 推回」，需要 uv 和 adb。
 主路径完全不依赖 adb —— 手动放文件即可。
 
@@ -100,7 +129,8 @@ batr <db>   字段级文本补丁（支持变长替换）+ CRC 追加修正
 │   ├── utils/crc.py          CRC32 追加修正（来自 BAMT，GPL-3.0；替代旧的 catalog 改写）
 │   ├── config.py             默认密钥、表过滤等
 │   └── data/                 OpenCC 词库（Apache-2.0）
-├── scripts/                  可选 adb 一键脚本（运行.bat / localize_phone.*）
+├── scripts/                  词表生成脚本（make_kivowiki_names / make_name_template）
+│   └── legacy/               从旧项目继承，已弃用的脚本
 ├── docs/                     原理、字体问题
 └── tests/                    pytest（CRC 已知向量、转换样例、端到端）
 ```
@@ -126,7 +156,7 @@ uv run batr patch --db ExcelDB.db --out ExcelDB.cn.db --verify
 ```
 
 Requires [uv](https://docs.astral.sh/uv/) (Python 3.12+, dependency: `sqlcipher3-wheels`).
-Re-run after each game update. Optional adb helpers live in `scripts/`.
+Re-run after each game update. Deprecated adb helpers live in `scripts/legacy/`.
 
 ---
 

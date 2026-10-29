@@ -9,7 +9,17 @@ from typing import Literal
 from tap import Tap, Positional
 
 from . import __version__, patch as patch_mod
-from .config import DEFAULT_CONVERT, DEFAULT_KEY, DEFAULT_NAMES_GLOSSARY, DEFAULT_OUT_DIR, DEFAULT_TABLE_PATTERN, DEFAULT_TEXT_GLOSSARY
+from .config import (
+    DEFAULT_CONVERT,
+    DEFAULT_KEY,
+    DEFAULT_NAMES_GLOSSARY,
+    DEFAULT_NAMES_LOCAL,
+    DEFAULT_OUT_DIR,
+    DEFAULT_TABLE_PATTERN,
+    DEFAULT_TERMS_GLOSSARY,
+    DEFAULT_TEXT_GLOSSARY,
+    DEFAULT_TEXT_LOCAL,
+)
 from .glossary import Glossary
 
 
@@ -53,8 +63,11 @@ def _cmd_patch(args: PatchArgs) -> int:
     except ValueError:
         print("--extra-bytes 需要偶数长度的 hex 字符串，如 DEADBEEF")
         return 1
-    names_paths = args.names or [DEFAULT_NAMES_GLOSSARY]
-    text_paths = args.text or [DEFAULT_TEXT_GLOSSARY]
+    # 手工表排在最前（重复键先出现者优先），自动生成的表其次，通用专名表最后（个人优先于共享）。
+    names_paths = args.names or [DEFAULT_NAMES_LOCAL, DEFAULT_NAMES_GLOSSARY]
+    text_paths = args.text or [DEFAULT_TEXT_LOCAL, DEFAULT_TEXT_GLOSSARY]
+    if os.path.exists(DEFAULT_TERMS_GLOSSARY):
+        text_paths = [*text_paths, DEFAULT_TERMS_GLOSSARY]
     glossary: Glossary | None = None
     if any(os.path.exists(p) for p in names_paths + text_paths):
         try:
