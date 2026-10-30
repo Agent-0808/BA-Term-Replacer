@@ -48,14 +48,27 @@ class PatchStats:
     tables: list[str] = field(default_factory=list)
 
 
-def _make_transform(conv: Converter | None, glossary: Glossary | None) -> Callable[[str], str | None]:
-    """文本改写链：先套译名对照表（names 整字段 / text 子串），再做 OpenCC 繁->简。"""
+def _make_transforms(
+    conv: Converter | None, glossary: Glossary | None
+) -> tuple[Callable[[str], str | None], Callable[[str], str | None]]:
+    """文本改写链：含 CJK 的字段走「对照表 + OpenCC」，纯 ASCII 字段只走 exact 整字段匹配。
+
+    ascii_transform 不做 sub、不经 OpenCC：ASCII 字段里有资源路径与内部标识符
+    （如 `UIs/03_Scenario/...`），子串替换会误伤；OpenCC 对纯 ASCII 也是空操作。
+    """
     def transform(text: str) -> str | None:
         new = glossary.apply(text) if glossary else text
         if conv is not None:
             new = conv.convert(new)
         return None if new == text else new
-    return transform
+
+    def ascii_transform(text: str) -> str | None:
+        if glossary is None:
+            return None
+        new = glossary.apply_exact(text)
+        return None if new is None or new == text else new
+
+    return transform, ascii_transform
 
 
 def patch_database(
@@ -68,6 +81,7 @@ def patch_database(
     tables: str = DEFAULT_TABLE_PATTERN,
     extra_bytes: bytes | None = None,
     glossary: Glossary | None = None,
+    ascii_exact: bool = True,
     dry_run: bool = False,
     verify: bool = False,
     log=print,
@@ -78,6 +92,7 @@ def patch_database(
     skip_kana: 含平/片假名的字段整体跳过（日文列是 GL 死数据，见设计文档 §6）。
     extra_bytes: CRC 修正前附加到输出末尾的自定义字节，修正后的 CRC 仍与输入一致。
     glossary: 译名对照表（先于 OpenCC 匹配，键为繁体原文）。
+    ascii_exact: 纯 ASCII 字段是否参与 exact 整字段匹配（见 _make_transforms）。
     dry_run 时直接只读打开 src 统计，不写任何文件。
     """
     src, dst = Path(src), Path(dst)  # 兼容 str 入参
@@ -93,8 +108,10 @@ def patch_database(
         log("convert=none（只做译名对照表）")
     if glossary is not None:
         log(f"glossary: names={len(glossary.exact_map)} 条  text={len(glossary.sub_map)} 条")
-    transform = _make_transform(conv, glossary)
-    log(f"kana-skip={'on' if skip_kana else 'off'}")
+    transform, ascii_transform = _make_transforms(conv, glossary)
+    if not ascii_exact:
+        ascii_transform = None  # 关闭纯 ASCII 字段匹配（不产出这类字段，省一遍扫描）
+    log(f"kana-skip={'on' if skip_kana else 'off'}  ascii-exact={'on' if ascii_exact else 'off'}")
 
     stats = PatchStats(target_crc=crc.compute_crc32(src))
     log(f"输入 CRC32 = {stats.target_crc:08X}（输出将与之对齐）")
@@ -134,7 +151,9 @@ def patch_database(
                     if not isinstance(blob, (bytes, bytearray)) or len(blob) < 16:
                         continue
                     try:
-                        new_blob, bs = patch_blob(bytes(blob), transform, skip_kana=skip_kana)
+                        new_blob, bs = patch_blob(
+                            bytes(blob), transform, skip_kana=skip_kana, ascii_transform=ascii_transform
+                        )
                     except ValueError:
                         stats.parse_failed += 1
                         t_bad += 1

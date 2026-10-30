@@ -4,7 +4,8 @@
 DEFAULT_KEY = "ef0aaca06f34b4a4be3172a75a3ea565e815f9ece35b1fb12b7a166ba0807bc4"
 
 # 可能包含玩家可见文本的表（正则，忽略大小写）。
-DEFAULT_TABLE_PATTERN = r"Localize|Dialog|Scenario|Subtitle|Talk|Mail|Name|Emoji|Voice"
+# Messanger 是聊天/Messenger 正文（16120 个中文字段），SNSProfile 是 SNS 简介。
+DEFAULT_TABLE_PATTERN = r"Localize|Dialog|Scenario|Subtitle|Talk|Mail|Name|Emoji|Voice|Messanger|SNSProfile"
 
 # OpenCC 模式：tw2sp 含台湾用词转换（伺服器->服务器），t2s 只转字形，
 # none 只做替换表、不转字形（繁->繁民译用，配合 glossary/*_custom.tsv）。

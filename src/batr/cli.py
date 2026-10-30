@@ -47,6 +47,7 @@ class PatchArgs(BaseTap):
     key: str = DEFAULT_KEY  # 32 字节 SQLCipher 密钥（hex）
     convert: Literal["tw2sp", "t2s", "none"] = DEFAULT_CONVERT  # tw2sp 含台湾用词转换，t2s 只转字形，none 只做替换表
     convert_kana: bool = False  # 不跳过含假名的字段（默认跳过：日文列在 GL 是死数据）
+    no_ascii_exact: bool = False  # 不替换纯 ASCII 字段（如角色名 "Kei"）
     tables: str = DEFAULT_TABLE_PATTERN  # 限定要处理的表名正则
     extra_bytes: str = "08080808"  # CRC 修正前附加到输出末尾的自定义字节（hex）
     names: list[Path] = []  # 角色名表（exact 整字段匹配），默认 glossary/names.tsv
@@ -87,6 +88,7 @@ def _cmd_patch(args: PatchArgs) -> int:
         tables=args.tables,
         extra_bytes=extra,
         glossary=glossary,
+        ascii_exact=not args.no_ascii_exact,
         dry_run=args.dry_run,
         verify=args.verify,
     )

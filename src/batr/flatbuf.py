@@ -31,10 +31,16 @@ def has_kana(text: str) -> bool:
     return any(0x3040 <= ord(ch) <= 0x30FF for ch in text)
 
 
-def read_string(b: bytes | bytearray, spos: int) -> str | None:
+def has_cjk(text: str) -> bool:
+    """文本是否含 CJK 表意文字（与 `_is_cjk` 同义，供补丁链判断字段是否为目标语种）。"""
+    return any(_is_cjk(ch) for ch in text)
+
+
+def read_string(b: bytes | bytearray, spos: int, *, require_cjk: bool = True) -> str | None:
     """按 §4.3 六条硬校验读取 spos 处的字符串；任一条不满足返回 None。
 
     校验是安全边界：字段 uoffset 可能实际指向标量/向量，误判会改坏数据。
+    require_cjk=False 时放行纯拉丁字段（如角色名的拉丁写法 "Kei"），只应配合 exact 匹配使用。
     """
     n = len(b)
     # 1. 位置落在数据区（0 处是 root uoffset，排除；至少要放得下长度前缀 + 1 字节）
@@ -54,7 +60,7 @@ def read_string(b: bytes | bytearray, spos: int) -> str | None:
     except UnicodeDecodeError:
         return None
     # 5. 至少含一个 CJK 字符（日文假名/韩文/泰文/英文都不是目标）
-    if not any(_is_cjk(ch) for ch in text):
+    if require_cjk and not has_cjk(text):
         return None
     # 6. 除 \n 外不含控制字符
     if any(ord(ch) < 32 and ch != "\n" for ch in text):
@@ -62,12 +68,15 @@ def read_string(b: bytes | bytearray, spos: int) -> str | None:
     return text
 
 
-def iter_string_fields(blob: bytes) -> Iterator[tuple[int, int, int, str]]:
+def iter_string_fields(
+    blob: bytes, *, allow_ascii: bool = False
+) -> Iterator[tuple[int, int, int, str]]:
     """逐个产出表对象里的字符串字段 `(slot, fpos, spos, text)`。
 
     slot   : vtable 槽位序号（0 起）
     fpos   : 字段在 blob 内的绝对位置
     spos   : 字符串长度前缀的绝对位置
+    allow_ascii: 同时产出不含 CJK 的字段（角色名的拉丁写法、资源路径等）
     结构不合法（root/vtable 越界等）抛 ValueError，由调用方决定保留原样。
     """
     n = len(blob)
@@ -93,7 +102,7 @@ def iter_string_fields(blob: bytes) -> Iterator[tuple[int, int, int, str]]:
         if fpos + 4 > n:
             continue  # 越界字段当不存在
         spos = fpos + int.from_bytes(blob[fpos:fpos + 4], "little")
-        text = read_string(blob, spos)
+        text = read_string(blob, spos, require_cjk=not allow_ascii)
         if text is not None:
             yield k - 2, fpos, spos, text
 
@@ -112,21 +121,27 @@ def patch_blob(
     transform: Callable[[str], str | None],
     *,
     skip_kana: bool = True,
+    ascii_transform: Callable[[str], str | None] | None = None,
 ) -> tuple[bytes | None, BlobStats]:
     """对单个 FlatBuffer blob 做字段级文本补丁（§4.2 算法）。
 
     transform(text) 返回 None 或与原文相同表示不修改。
+    ascii_transform: 不含 CJK 的字段（如角色名的拉丁写法 "Kei"）专用的变换；None 表示不处理这类字段。
+        调用方应只做整字段（exact）匹配，不做子串，避免误伤资源路径与内部标识符。
     返回 (新 blob 或 None, 统计)；结构不合法抛 ValueError（调用方保留原 blob）。
     """
     b = bytearray(blob)
     stats = BlobStats()
     appended: dict[int, int] = {}  # spos -> 追加后的新 spos（共享字符串只追加一次）
     changed = False
-    for _slot, fpos, spos, text in iter_string_fields(b):
+    for _slot, fpos, spos, text in iter_string_fields(b, allow_ascii=ascii_transform is not None):
         if skip_kana and has_kana(text):
             stats.kana_skipped += 1
             continue
-        new_text = transform(text)
+        fn = transform if has_cjk(text) else ascii_transform
+        if fn is None:
+            continue
+        new_text = fn(text)
         if new_text is None or new_text == text:
             continue
         new_bytes = new_text.encode("utf-8")

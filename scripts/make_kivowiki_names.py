@@ -257,12 +257,16 @@ def build(
             joined_tw = tw.replace(" ", "")
             if not joined_tw.isascii() and given_tw not in black_names:
                 feed(joined_tw, name.replace(" ", ""))
-        # 皮肤名（exact 无误伤风险；仅民间名与 t2s 不同时才需要词条）
+        # 皮肤名：游戏里以「角色名(皮肤)」的内嵌形式出现（如 白子(單車)、瀬奈(私服)），
+        # 正文表因此用**带括号的键**，只命中括号内的皮肤词，不误伤正文里的裸词（如單車）。
         for page in st.get("pages", []):
             skin_tw = (page.get("skin_tw") or "").strip()
             skin = (page.get("skin") or "").strip() or (page.get("skin_cn") or "").strip()
             if skin_tw and skin:
-                feed(skin_tw, skin)
+                feed(skin_tw, skin)  # names：整字段兜底（少数界面单独显示皮肤名）
+                if with_text:
+                    add_entry(auto_text, f"({skin_tw})", f"({skin})", blocked=black_text,
+                              covered=covered_text, conv=conv, stats=s_text, dup=dup_text)
 
     report("names", s_names, dup_names)
     if with_text:

@@ -75,3 +75,13 @@ class Glossary:
                 out.append(text[i])
                 i += 1
         return "".join(out)
+
+    def apply_exact(self, text: str) -> str | None:
+        """只做 exact 整字段匹配，不返回原文（无命中为 None）。
+
+        纯 ASCII 字段（角色名的拉丁写法，如 "Kei"）专用：不做 sub，避免误伤资源路径与内部标识符。
+        """
+        new = self.exact_map.get(text)
+        if new is not None:
+            self.hits[text] += 1
+        return new
