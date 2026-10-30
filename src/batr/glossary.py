@@ -39,7 +39,7 @@ class Glossary:
                     continue
                 parts = line.split("\t")
                 if len(parts) < 2 or not parts[0].strip() or not parts[1]:
-                    print(f"[glossary] {path}:{ln} 跳过无效行（需要「旧词<TAB>新词」，分隔符是 Tab，不是空格）")
+                    print(f"[glossary] {path}:{ln} 跳过无效行 {line!r}（需要「旧词<TAB>新词」，分隔符是 Tab，不是空格）")
                     continue
                 old, new = parts[0].strip(), parts[1]
                 if old == new:

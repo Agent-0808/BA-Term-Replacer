@@ -34,7 +34,7 @@ class ScanArgs(Tap):
     keywords: Positional[list[str]] = []  # 要查找的关键词（--uncovered 时可省略）
     tables: str = ""  # 表名正则过滤（默认全部表）
     ascii: bool = False  # 连纯拉丁字段一起扫描（allow_ascii）
-    limit: int = 5  # 每表每关键词的样本条数
+    limit: int = 30 # 每表每关键词的样本条数
     diff: Path | None = None  # 再扫另一个库，输出两库命中数对比（验证替换效果）
     uncovered: bool = False  # 列出未匹配默认表正则但含中文字段的表
 
