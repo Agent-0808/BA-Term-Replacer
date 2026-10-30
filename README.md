@@ -1,14 +1,17 @@
-# BA-Term-Replacer · 蔚蓝档案国际服繁體 → 简体 / 译名替换工具
+<div align="center" style="text-align:center">
+  <h1>BA-Term-Replacer</h1>
+  <p>
+    蔚蓝档案国际服 - 繁體→简体本地化 / 自定义译名替换工具
+  </p>
+    <a href="https://www.gnu.org/licenses/gpl-3.0"><img alt="License: GPLv3" src="https://img.shields.io/badge/License-GPL--3.0-orange?style=for-the-badge"></a>
+    <img alt="Blue Archive Global" src="https://img.shields.io/badge/Blue%20Archive-Global-blue?style=for-the-badge">
+  </p>
+</div>
 
-把**国际服（Global / 繁中）客户端**的界面与剧情文本就地改成**简体中文**。
-输入一个 `ExcelDB.db`，输出另一个**可直接使用**的 `ExcelDB.db` —— 不改 catalog、不碰设备。
+把国际服（Global / 繁中）客户端的界面与剧情文本本地化为简体中文；或套用自制的繁体民译词表，保持繁体。
+输入一个 `ExcelDB.db`，输出另一个可直接使用的 `ExcelDB.db`。
 
-- ✅ **不需要 root**、不重签 APK、不碰服务器
-- ✅ **不再需要改 `TableCatalog.bytes`**：输出库的 CRC32 与原库完全一致（末尾追加 4 字节修正），客户端校验自然通过
-- ✅ **输入文件永不修改**，原版始终在你手上
-- ✅ 结构零风险：只在 FlatBuffer 内做**等长字节替换**
-
-> 仅适用于 **GL（国际服，繁中）**。日服/韩服/国服的库和文本表不同，不通用。
+> 仅适用于 **国际服繁中**。
 
 | 改之前 | 改之后 |
 |---|---|
@@ -19,19 +22,86 @@
 ## 快速开始（需要 [uv](https://docs.astral.sh/uv/)）
 
 ```bash
+git clone https://github.com/Agent-0808/BA-Term-Replacer.git
+cd BA-Term-Replacer
 uv sync
 
 # 只看会改什么，不写任何文件
 uv run batr ExcelDB.db --dry-run
 
-# 转换 + CRC 修正，产出可直接使用的库（省略 --out 时写到 output/ExcelDB.db）
-uv run batr ExcelDB.db --out output/ExcelDB.cn.db --verify
+# 转换，产出可直接使用的库（写到 output/ExcelDB.db）
+uv run batr ExcelDB.db
 ```
 
 把 `db` 换成你从设备拉出的 `ExcelDB.db`（放在 `/sdcard/Android/data/com.nexon.bluearchive/files/PUB/Resource/Preload/TableBundles/`），
 完成后把 `--out` 的产物放回同一路径即可。`--verify` 会对输出跑 `PRAGMA integrity_check`。
 
+## 详细使用教程
+
+两种主要用途：
+- **繁→简**（kivowiki 民译词表 + OpenCC 字形转换）
+- **繁→繁民译**（不转字形，纯词表，译文自己写）
+
+差别只在词表来源和 `--convert` 参数，命令骨架相同。
+
+### 1. 获取词表
+
+`glossary/` 里入库共享的只有 `blacklist.txt`（客观禁用项）与 `terms.tsv`（通用专名），词表本体需要本地生成：
+
+```bash
+uv run python scripts/make_kivowiki_names.py   # 繁→简用：names.tsv（角色名）+ text.tsv（正文），kivowiki 古书馆民译
+uv run python scripts/make_name_template.py    # 繁→繁用：names_custom.tsv 恒等行模板 + text_custom.tsv 空表
+```
+
+- `make_kivowiki_names.py` 自动拉取民译数据（缓存于 `work/students.json`，`--refresh` 强制重新下载），生成后繁→简流程即可直接使用。
+- `make_name_template.py` 生成的 `names_custom.tsv` 每行都是恒等行（如`彌香<TAB>彌香`），把右列改成你要的繁体译名即生效；没改的行加载时自动跳过，不会产生替换。`text_custom.tsv` 需要手写（地名/术语等）。
+
+### 2. 修改词表
+
+| 想要修改 | 修改文件 |
+|---|---|
+| 写自己的角色名译名（繁→繁） | `names_custom.tsv`（改恒等行右列） |
+| 补充/修正译名（繁→简） | `names.local.tsv` / `text.local.tsv`（首次运行自动生成空模板，优先级最高） |
+| 地名/组织/术语 | `terms.tsv`（入库共享，CLI 始终自动加载） |
+| 禁用某个自动词条 | `blacklist.local.txt`（个人喜好）或 `blacklist.txt`（入库共享） |
+
+注意：
+
+- `names.tsv` / `text.tsv` 是纯自动产物，每次重新生成都会被完整重写，不要直接编辑；个人内容一律写 `.local` 文件（重复键以先加载的为准，个人条目优先于自动表）。
+- 分隔符是 **Tab** 不是空格；键必须是数据库里的繁体原文；值写译文（繁→繁写繁体；繁→简可以简体或繁体，还会通过 OpenCC 转成简体）。
+- 黑名单可加第二列限定生效表：`希望<TAB>text` = 角色名照常生成、正文子串替换跳过（避免误伤普通词），`键<TAB>names` 反之。
+- 皮肤名在 text 表里带括号生成（`(單車) → (骑行服)`），只命中 `白子(單車)` 这类复合串，不会动正文里的「單車」。
+
+### 3. 运行命令
+
+#### **繁→简**
+默认：tw2sp + 自动词表 + terms.tsv
+
+```bash
+uv run batr ExcelDB.db --dry-run                            # 预演：逐规则打印命中数，hits=0 多半是键写错
+uv run batr ExcelDB.db --out output/ExcelDB.cn.db --verify  # 正式产出（CRC32 与输入一致）
+```
+
+#### **繁→繁民译**
+`--convert none` 关闭字形转换；务必显式传 custom 表——默认加载的 names.tsv/text.tsv 值是简体，不覆盖会把文本转成简体：
+
+```bash
+uv run batr ExcelDB.db --convert none \
+  --names glossary/names_custom.tsv --text glossary/text_custom.tsv --dry-run
+
+uv run batr ExcelDB.db --convert none \
+  --names glossary/names_custom.tsv --text glossary/text_custom.tsv \
+  --out output/ExcelDB.tw.db
+```
+
+完成后把输出产物放回设备原路径（`SteamLibrary\steamapps\common\BlueArchive\BlueArchive_Data\StreamingAssets\PUB\Resource\Preload\TableBundles\ExcelDB.db`），游戏内点了「资源修复 / 重新下载」才需要重跑。替换没生效、译名不对时，用 [scripts/scan_fields.py](scripts/scan_fields.py) 做字段级排查，完整参数与排查路径见 [docs/脚本用法说明.md](docs/脚本用法说明.md)。
+
 ### 命令一览
+
+```
+uv run batr -h
+```
+
 
 ```
 batr <db>   字段级文本补丁（支持变长替换）+ CRC 追加修正
@@ -42,63 +112,30 @@ batr <db>   字段级文本补丁（支持变长替换）+ CRC 追加修正
   --convert-kana     不跳过含假名的字段（默认跳过：日文列在 GL 是死数据）
   --tables <正则>    限定要处理的表（默认 Localize|Dialog|Scenario|...）
   --extra-bytes HEX  CRC 修正前附加到输出末尾的自定义字节（hex，如 DEADBEEF）
-  --names TSV...     角色名表（exact 整字段匹配），默认 glossary/names.tsv，空格分隔可传多个
-  --text TSV...      正文替换表（sub 子串匹配），默认 glossary/text.tsv，空格分隔可传多个
+  --names TSV...     角色名表（exact 整字段匹配），默认 names.local.tsv + names.tsv（.local 优先）
+  --text TSV...      正文替换表（sub 子串匹配），默认 text.local.tsv + text.tsv + terms.tsv
+  --no-ascii-exact   关闭纯 ASCII 字段的 exact 匹配（默认开启，覆盖 "Kei" 这类拉丁角色名）
   --key <hex>        覆盖 SQLCipher 密钥（游戏换密钥时用）
   --dry-run          只统计，不写任何文件
-  --verify           输出库跑 integrity_check
+  --verify           输出后进行 integrity_check
 ```
-
-### 繁中 → 繁中民译（只换译名，不转简体）
-
-`--convert none` 关闭字形转换、只套词表，产物仍是繁体：
-
-```bash
-# 先预览：逐规则 hits=0 的条目多半是键写错或词条过期
-uv run batr ExcelDB.db --convert none \
-  --names glossary/names_custom.tsv --text glossary/text_custom.tsv --dry-run
-
-# 正式产出
-uv run batr ExcelDB.db --convert none \
-  --names glossary/names_custom.tsv --text glossary/text_custom.tsv --out output/ExcelDB.tw.db
-```
-
-务必显式传 `--names` / `--text`：默认的 `glossary/names.tsv` / `text.tsv`（及 `.local` 变体）值是简体，不覆盖会把文本转成简体。
-
-词表（`glossary/` 自动产物与个人词表不入库；仅 `blacklist.txt`（客观禁用）与 `terms.tsv`（通用专名）跟踪）：
-
-```bash
-uv run python scripts/make_kivowiki_names.py   # names.tsv / text.tsv：kivowiki 古书馆民译（繁->简流程用）
-uv run python scripts/make_name_template.py    # names_custom.tsv / text_custom.tsv：繁->繁模板，右列自己填
-```
-
-- `names.tsv` / `text.tsv` 是**纯自动产物，每次完整重新生成**，不含任何手工内容，不要直接编辑。个人补充/修正写 `glossary/names.local.tsv` / `glossary/text.local.tsv`（本地、不入库，首次运行自动建空模板）；CLI 默认把它们排在自动表**之前**加载，重复键以先出现的为准，即个人条目优先。
-- 禁用某个自动键写黑名单：`glossary/blacklist.local.txt`（个人、不入库，首次运行自动建模板）或 `glossary/blacklist.txt`（客观、入库）。默认两表都排除；写第二列可限定生效表：`希望<TAB>text` = 角色名表照常生成、正文子串替换跳过（防止误伤普通词），`键<TAB>names` 反之。
-- `glossary/terms.tsv`（入库共享）放地名/组织/术语的社区通用民译（如 `奇普托斯<TAB>基沃托斯`），只做 sub 匹配；文件存在时 CLI **始终自动加载**，个人表同名键优先。
-- `names_custom.tsv` 是恒等行模板（`彌香<TAB>彌香`），右列与左列相同 = 未填写，加载时自动跳过，不会产生任何替换。
-- 键必须写数据库里的**繁体原文**，分隔符是 Tab 不是空格；值写译文即可（繁->繁用繁体，繁->简流程最终由 OpenCC 转简体）。
-
-### 可选：adb 一键脚本（不保证维护）
-
-`scripts/legacy/运行.bat` / `scripts/legacy/localize_phone.ps1` / `scripts/legacy/localize_phone.sh`：
-自动「停游戏 → 拉库（备份到 work/）→ `batr patch` → 推回」，需要 uv 和 adb。
-主路径完全不依赖 adb —— 手动放文件即可。
 
 ---
 
-## 它到底做了什么
+## 它做了什么
 
 游戏的表数据放在 **SQLCipher 加密**的 `ExcelDB.db` 里（约 330 MB、424 张表）。
 每张表是 `(Key INTEGER, Bytes BLOB)`，`Bytes` 是装着整表数据的 **FlatBuffer**。
 
-1. 用密钥打开库，在每行 blob 内做**等长字节替换**：繁→简几乎都是 3 字节 UTF-8 汉字互换
-   （`學園→学园`、`檔案→档案`）。**长度不变 ⇒ FlatBuffer 的所有偏移字段保持有效 ⇒ 结构零风险。**
-2. 转换完成后，在输出文件**末尾追加 4 字节**，使整体 CRC32 与输入完全一致
-   （标准 CRC32 可逆构造，见 `src/batr/crc.py`）。GL 的 `TableCatalog.bytes` 只记录
-   CRC32、不记录文件大小，因此客户端校验必然通过 —— **catalog 完全不用动**。
-
-实测（与旧版等长转换完全一致）：**267,036 行 / 1,775,029 字**；输出 CRC `C3F4D218` == 输入；
-`PRAGMA integrity_check` = ok。
+1. **字段级改写**：解析每行 blob 里的字符串字段，只改字符串内容、不动 FlatBuffer 结构。含假名的字段整体跳过（日文列在 GL 是死数据）；纯 ASCII 字段（拉丁角色名，如 "Kei"）只做整字段匹配，避免误伤资源路径与内部标识符。
+2. **词表优先，可选转简**：先套译名词表——names 表 **exact 整字段匹配**（整个字段相等才替换，
+   只命中角色名字段）、text/terms 表 **sub 子串匹配**（单趟、最长键优先、不级联）；
+   之后按 `--convert` 做可选的繁中→简中（tw2sp / t2s；`none` 跳过转换，保持繁体民译）。
+3. **结构零风险**：等长替换原地写字节；变长替换把新字符串**追加到 blob 末尾**并回填该字段的
+   uoffset——已有字节一概不移动，所有旧偏移依然有效。
+4. **CRC32 追加修正**：输出末尾追加 4 字节，使整体 CRC32 与输入完全一致（标准 CRC32 可逆构造，
+   见 `src/batr/utils/crc.py`）。GL 的 `TableCatalog.bytes` 只记录 CRC32、不记录文件大小。**catalog 完全不用动**。
+    - *注：本方法仅对国际服有效，日服似乎会保存大小，因此需要改动TableCatalog*
 
 技术细节与踩坑记录见 [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)。
 
@@ -111,8 +148,16 @@ uv run python scripts/make_name_template.py    # names_custom.tsv / text_custom.
 | 打不开数据库（wrong key） | 游戏大版本更新换了密钥 → `--key` 覆盖 |
 | 转换完少数词仍是台式 | 词库覆盖面问题，欢迎 PR 补词（改 `src/batr/data/`） |
 | 某些字大小/粗细不统一 | 用 [BA-Font-Replacer](https://github.com/Agent-0808/BA-Font-Replacer) 替换字体即可，详见 [docs/字体问题.md](docs/字体问题.md) |
-| 进游戏又变回繁体了 | 点了游戏内「资源修复 / 重新下载」→ 重新执行即可 |
-| 游戏更新后要重跑 | 库变了 → 重新拉取并跑 `batr patch`（对输出 CRC 自动对齐新库） |
+| 进游戏又变回繁体了 | 游戏本体更新了 → 使用新数据库重新执行即可 |
+| 游戏更新后失效 | 库变了 → 重新拉取并跑 `batr patch`（对输出 CRC 自动对齐新库） |
+
+## 字体观感问题
+
+汉化后**被改动过的字**可能比繁简同形的字看起来更细或更小（根因分析见[docs/字体问题.md](docs/字体问题.md)）。
+
+**已解决**：使用 [BA-Font-Replacer](https://github.com/Agent-0808/BA-Font-Replacer)
+把客户端的繁体字体（TW 字体）替换为**思源黑体 SC 的 Medium 与 Bold** 两个字重即可，
+简体字形将全部由同一款字体渲染，观感完全统一。
 
 ---
 
@@ -137,28 +182,14 @@ uv run python scripts/make_name_template.py    # names_custom.tsv / text_custom.
 
 ---
 
-## English summary
+## License
 
-Convert the **Blue Archive Global (Traditional Chinese)** client's UI and story text to
-**Simplified Chinese**. Input: an `ExcelDB.db` pulled from the device; output: another
-`ExcelDB.db` usable as-is — no catalog rewriting needed.
-
-The game keeps its tables in a SQLCipher-encrypted SQLite database; each row is
-`(key, Bytes)` where `Bytes` is a FlatBuffer. The tool performs **equal-length UTF-8
-byte substitution** inside those blobs (Traditional→Simplified is almost always a 3-byte
-CJK swap), so every FlatBuffer offset stays valid. It then **appends 4 bytes** so the
-whole file's CRC32 matches the original — the GL `TableCatalog.bytes` records only a
-CRC (no size), so the client's integrity check passes untouched.
-
-```bash
-uv sync
-uv run batr patch --db ExcelDB.db --out ExcelDB.cn.db --verify
-```
-
-Requires [uv](https://docs.astral.sh/uv/) (Python 3.12+, dependency: `sqlcipher3-wheels`).
-Re-run after each game update. Deprecated adb helpers live in `scripts/legacy/`.
-
----
+本仓库：**GPL-3.0**（见 [LICENSE](LICENSE)）—— 因包含来自 BAMT（GPL-3.0）的
+[src/batr/utils/crc.py](src/batr/utils/crc.py)，全仓库统一按 GPL-3.0 分发。
+原项目 [alisns1/blue-archive-gl-simplified](https://github.com/alisns1/blue-archive-gl-simplified) 的 MIT
+许可证全文保留于 [licenses/](licenses/)。
+`src/batr/data/` 下的 OpenCC 词库：**Apache-2.0**（见 [src/batr/data/LICENSE-OpenCC.txt](src/batr/data/LICENSE-OpenCC.txt)）。
+其余第三方署名见 [THIRD_PARTY.md](THIRD_PARTY.md)。
 
 ## 署名与第三方组件
 
@@ -178,25 +209,6 @@ Re-run after each game update. Deprecated adb helpers live in `scripts/legacy/`.
 
 > **声明**：本仓库不含任何游戏素材。密钥 `ef0aaca0…` 是社区公开流传的**数据值**，
 > 作为可覆盖的默认值提供（`--key` / `BA_KEY`）。
-
-## License
-
-本仓库：**GPL-3.0**（见 [LICENSE](LICENSE)）—— 因包含来自 BAMT（GPL-3.0）的
-[src/batr/utils/crc.py](src/batr/utils/crc.py)，全仓库统一按 GPL-3.0 分发。
-原项目 [alisns1/blue-archive-gl-simplified](https://github.com/alisns1/blue-archive-gl-simplified) 的 MIT
-许可证全文保留于 [licenses/](licenses/)。
-`src/batr/data/` 下的 OpenCC 词库：**Apache-2.0**（见 [src/batr/data/LICENSE-OpenCC.txt](src/batr/data/LICENSE-OpenCC.txt)）。
-其余第三方署名见 [THIRD_PARTY.md](THIRD_PARTY.md)。
-
----
-
-## 字体观感问题
-
-汉化后**被改动过的字**可能比繁简同形的字看起来更细或更小（根因分析见[docs/字体问题.md](docs/字体问题.md)）。
-
-**已解决**：使用 [BA-Font-Replacer](https://github.com/Agent-0808/BA-Font-Replacer)
-把客户端的繁体字体（TW 字体）替换为**思源黑体 SC 的 Medium 与 Bold** 两个字重即可，
-简体字形将全部由同一款字体渲染，观感完全统一。
 
 ---
 
