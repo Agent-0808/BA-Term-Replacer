@@ -19,28 +19,23 @@
 
 ---
 
-## 快速开始（需要 [uv](https://docs.astral.sh/uv/)）
+## 安装
+
+- 需要 [uv](https://docs.astral.sh/uv/)
 
 ```bash
 git clone https://github.com/Agent-0808/BA-Term-Replacer.git
 cd BA-Term-Replacer
 uv sync
-
-# 只看会改什么，不写任何文件
-uv run batr ExcelDB.db --dry-run
-
-# 转换，产出可直接使用的库（写到 output/ExcelDB.db）
-uv run batr ExcelDB.db
 ```
 
-把 `db` 换成你从设备拉出的 `ExcelDB.db`（放在 `/sdcard/Android/data/com.nexon.bluearchive/files/PUB/Resource/Preload/TableBundles/`），
-完成后把 `--out` 的产物放回同一路径即可。`--verify` 会对输出跑 `PRAGMA integrity_check`。
+PC 端支持自动定位 Steam 客户端的 `ExcelDB.db` 文件，`uv run batr paths` 可查看检测结果；
 
 ## 详细使用教程
 
 两种主要用途：
 - **繁→简**（kivowiki 民译词表 + OpenCC 字形转换）
-- **繁→繁民译**（不转字形，纯词表，译文自己写）
+- **繁→繁民译**（不转字形，纯词表，自己写译文）
 
 差别只在词表来源和 `--convert` 参数，命令骨架相同。
 
@@ -49,12 +44,12 @@ uv run batr ExcelDB.db
 `glossary/` 里入库共享的只有 `blacklist.txt`（客观禁用项）与 `terms.tsv`（通用专名），词表本体需要本地生成：
 
 ```bash
-uv run python scripts/make_kivowiki_names.py   # 繁→简用：names.tsv（角色名）+ text.tsv（正文），kivowiki 古书馆民译
-uv run python scripts/make_name_template.py    # 繁→繁用：names_custom.tsv 恒等行模板 + text_custom.tsv 空表
+uv run batr glossary             # 繁→简用：names.tsv（角色名）+ text.tsv（正文），kivowiki 古书馆民译
+uv run batr glossary --template  # 繁→繁用：names_custom.tsv 恒等行模板 + text_custom.tsv 空表
 ```
 
-- `make_kivowiki_names.py` 自动拉取民译数据（缓存于 `work/students.json`，`--refresh` 强制重新下载），生成后繁→简流程即可直接使用。
-- `make_name_template.py` 生成的 `names_custom.tsv` 每行都是恒等行（如`彌香<TAB>彌香`），把右列改成你要的繁体译名即生效；没改的行加载时自动跳过，不会产生替换。`text_custom.tsv` 需要手写（地名/术语等）。
+- 自动表自动拉取民译数据（缓存于 `work/students.json`，`--refresh` 强制重新下载），生成后繁→简流程即可直接使用。
+- `--template` 生成的 `names_custom.tsv` 每行都是恒等行（如`彌香<TAB>彌香`），把右列改成你要的繁体译名即生效；没改的行加载时自动跳过，不会产生替换。`text_custom.tsv` 需要手写（地名/术语等）。
 
 ### 2. 修改词表
 
@@ -78,23 +73,25 @@ uv run python scripts/make_name_template.py    # 繁→繁用：names_custom.tsv
 默认：tw2sp + 自动词表 + terms.tsv
 
 ```bash
-uv run batr ExcelDB.db --dry-run                            # 预演：逐规则打印命中数，hits=0 多半是键写错
-uv run batr ExcelDB.db --out output/ExcelDB.cn.db --verify  # 正式产出（CRC32 与输入一致）
+uv run batr patch --dry-run                                  # 预演：逐规则打印命中数，hits=0 多半是键写错
+uv run batr patch --out output/ExcelDB.cn.db --verify        # 正式产出（CRC32 与输入一致）
 ```
 
 #### **繁→繁民译**
 `--convert none` 关闭字形转换；务必显式传 custom 表——默认加载的 names.tsv/text.tsv 值是简体，不覆盖会把文本转成简体：
 
 ```bash
-uv run batr ExcelDB.db --convert none \
+uv run batr patch --convert none \
   --names glossary/names_custom.tsv --text glossary/text_custom.tsv --dry-run
 
-uv run batr ExcelDB.db --convert none \
+uv run batr patch --convert none \
   --names glossary/names_custom.tsv --text glossary/text_custom.tsv \
   --out output/ExcelDB.tw.db
 ```
 
-完成后把输出产物放回设备原路径（`SteamLibrary\steamapps\common\BlueArchive\BlueArchive_Data\StreamingAssets\PUB\Resource\Preload\TableBundles\ExcelDB.db`），游戏内点了「资源修复 / 重新下载」才需要重跑。替换没生效、译名不对时，用 [scripts/scan_fields.py](scripts/scan_fields.py) 做字段级排查，完整参数与排查路径见 [docs/脚本用法说明.md](docs/脚本用法说明.md)。
+PC 端完成后 `uv run batr patch --install` 可直接覆盖安装到游戏目录（覆盖前自动备份原库为 `.bak`）；
+移动端把输出产物放回设备原路径。游戏内点了「资源修复 / 重新下载」才需要重跑。
+替换没生效、译名不对时，用 `uv run batr scan` 做字段级排查，完整参数与排查路径见 [docs/脚本用法说明.md](docs/脚本用法说明.md)。
 
 ### 命令一览
 
@@ -104,8 +101,15 @@ uv run batr -h
 
 
 ```
-batr <db>   字段级文本补丁（支持变长替换）+ CRC 追加修正
-  db                输入 ExcelDB.db（位置参数，不会被修改）
+batr <子命令>
+  patch      字段级文本补丁（支持变长替换）+ CRC 追加修正，--install 覆盖安装到游戏目录
+  scan       字段级扫描（调试）：关键词定位 / 两库对比 / 未覆盖表清单
+  export     把目标表的文本字段导出成每表一个 TSV
+  glossary   词表生成：自动表（默认）或自制模板（--template）
+  paths      显示检测到的游戏安装路径与 ExcelDB.db 路径
+
+patch 常用参数（其余子命令见 -h）：
+  --db <文件>        输入 ExcelDB.db（不会被修改；省略则自动定位游戏安装路径）
   --out <文件>       输出库（CRC32 与输入一致；默认 output/<输入文件名>）
   --convert <模式>   tw2sp 含台湾用词转换（伺服器->服务器），t2s 只转字形，
                      none 只做替换表（默认 tw2sp）
@@ -118,6 +122,9 @@ batr <db>   字段级文本补丁（支持变长替换）+ CRC 追加修正
   --key <hex>        覆盖 SQLCipher 密钥（游戏换密钥时用）
   --dry-run          只统计，不写任何文件
   --verify           输出后进行 integrity_check
+  --region <区服>    自动定位用的区服（auto = global 优先，japan 兜底）
+  --install          补丁成功后覆盖安装到游戏目录（覆盖前备份 .bak，交互确认）
+  --yes              覆盖安装跳过交互确认
 ```
 
 ---
@@ -167,16 +174,17 @@ batr <db>   字段级文本补丁（支持变长替换）+ CRC 追加修正
 .
 ├── pyproject.toml            uv 项目定义（依赖、batr 命令入口）
 ├── src/batr/
-│   ├── cli.py                命令行入口（patch / crc-fix）
+│   ├── cli.py                命令行入口（子命令注册与分发）
+│   ├── commands/             各子命令（patch / scan / export / glossary / paths）
 │   ├── patch.py              遍历库 → 等长转换 → CRC 修正 → 自校验
 │   ├── convert.py            繁简映射（OpenCC 词库，纯 Python）
 │   ├── db.py                 SQLCipher 打开 / 遍历
-│   ├── utils/crc.py          CRC32 追加修正（来自 BAMT，GPL-3.0；替代旧的 catalog 改写）
+│   ├── utils/                paths.py（游戏路径定位）、crc.py（CRC32 追加修正，来自 BAMT，GPL-3.0）
 │   ├── config.py             默认密钥、表过滤等
 │   └── data/                 OpenCC 词库（Apache-2.0）
-├── scripts/                  词表生成脚本（make_kivowiki_names / make_name_template）
-│   └── legacy/               从旧项目继承，已弃用的脚本
-├── docs/                     原理、字体问题
+├── scripts/legacy/           从旧项目继承，已弃用的脚本
+├── glossary/                 词表（自动生成的本体不入库；blacklist/terms 入库共享）
+├── docs/                     原理、用法说明、字体问题
 └── tests/                    pytest（CRC 已知向量、转换样例、端到端）
 ```
 

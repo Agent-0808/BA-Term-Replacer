@@ -1,9 +1,10 @@
-"""全量文本导出：把目标表的文本字段导出成可读 TSV（每表一个文件）。
+# commands/export.py
+"""export 子命令：全量文本导出，把目标表的文本字段导出成可读 TSV（每表一个文件）。
 
-用法（在仓库根目录）：
-    uv run python scripts/export_texts.py work/db/ExcelDB.db
-    uv run python scripts/export_texts.py work/db/ExcelDB.db --tables Localize   # 只导部分表
-    uv run python scripts/export_texts.py work/db/ExcelDB.db --kana --ascii      # 连日文/拉丁字段一起导
+用法（db 省略时自动定位游戏客户端内的库）：
+    uv run batr export
+    uv run batr export --db work/db/ExcelDB.db --tables Localize   # 只导部分表
+    uv run batr export --kana --ascii                              # 连日文/拉丁字段一起导
 
 格式：每表一个 <表名>.tsv（UTF-8 BOM，Excel 可直接打开），四列 rowid / key / slot / text，
 每个文本字段一行。正文里的 Tab 与换行转义成字面 \\t / \\n，保证一行一条、可直接 grep。
@@ -12,21 +13,20 @@ rowid + slot 是改回数据库的锚点；key 列取表中第一个非 Bytes �
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from tap import Positional, Tap  # noqa: E402
+from .. import db as batr_db
+from ..config import DEFAULT_KEY, DEFAULT_OUT_DIR, DEFAULT_TABLE_PATTERN
+from ..flatbuf import has_cjk, has_kana, iter_string_fields
+from ..utils.paths import BARegion, resolve_excel_db
+from .base import BaseTap
 
-from batr import db as batr_db  # noqa: E402
-from batr.config import DEFAULT_KEY, DEFAULT_OUT_DIR, DEFAULT_TABLE_PATTERN  # noqa: E402
-from batr.flatbuf import has_cjk, has_kana, iter_string_fields  # noqa: E402
 
-
-class ExportArgs(Tap):
+class ExportTap(BaseTap):
     """把数据库文本导出成每表一个 TSV。"""
 
-    db: Positional[Path]  # ExcelDB.db 路径
+    db: Path | None = None  # ExcelDB.db 路径（省略时自动定位游戏安装路径）
+    region: BARegion = "auto"  # 自动定位游戏路径用的区服（auto = global 优先，japan 兜底）
     out: Path = Path(DEFAULT_OUT_DIR) / "tables"  # 导出目录（每表一个 <表名>.tsv）
     tables: str = DEFAULT_TABLE_PATTERN  # 表名正则过滤
     kana: bool = False  # 连含假名字段一起导（默认跳过：日文列是 GL 死数据）
@@ -74,10 +74,14 @@ def export_table(con, table: str, out_path: Path, *, kana: bool, ascii_on: bool)
     return written
 
 
-def main() -> None:
-    args = ExportArgs().parse_args()
+def handle_export(args: ExportTap) -> int:
+    """处理 export 子命令（args 为合并了子命令属性的主 namespace）。"""
+    db = resolve_excel_db(args.db, args.region)
+    if db is None:
+        print("未指定 --db 且未能从注册表定位游戏安装路径；请显式给出 --db，或用 --region 指定区服")
+        return 1
     args.out.mkdir(parents=True, exist_ok=True)
-    con = batr_db.connect(str(args.db), DEFAULT_KEY)
+    con = batr_db.connect(str(db), DEFAULT_KEY)
     total_tables = total_fields = 0
     try:
         for table in batr_db.select_tables(con, args.tables):
@@ -89,7 +93,4 @@ def main() -> None:
     finally:
         con.close()
     print(f"=== {total_tables} 张表，{total_fields} 个字段 → {args.out}/ ===")
-
-
-if __name__ == "__main__":
-    main()
+    return 0

@@ -1,9 +1,10 @@
-"""字段级扫描（调试工具）：关键词在哪些表、哪些字段、以什么形态出现。
+# commands/scan.py
+"""scan 子命令：字段级扫描（调试工具），关键词在哪些表、哪些字段、以什么形态出现。
 
-用法（在仓库根目录）：
-    uv run python scripts/scan_fields.py <db> <关键词...> [--tables 正则] [--ascii] [--limit N]
-    uv run python scripts/scan_fields.py <db> <关键词...> --diff <另一个db>   # 两库命中数对比（验证替换效果）
-    uv run python scripts/scan_fields.py <db> --uncovered                    # 未匹配默认表正则但含中文字段的表
+用法（db 省略时自动定位游戏客户端内的库）：
+    uv run batr scan <关键词...> [--db <db>] [--tables 正则] [--ascii] [--limit N]
+    uv run batr scan <关键词...> --diff <另一个db>   # 两库命中数对比（验证替换效果）
+    uv run batr scan --uncovered                    # 未匹配默认表正则但含中文字段的表
 
 字段按三类统计：kana（含假名，日文死数据，只计数不出样本）/ cjk（中文字段）/ ascii（纯拉丁，
 默认不扫，--ascii 开启后经 exact 整字段匹配可命中的那类，如角色名的拉丁写法 "Kei"）。
@@ -12,26 +13,27 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from tap import Positional, Tap  # noqa: E402
+from tap import Positional
 
-from batr import db as batr_db  # noqa: E402
-from batr.config import DEFAULT_KEY, DEFAULT_TABLE_PATTERN  # noqa: E402
-from batr.flatbuf import has_cjk, has_kana, iter_string_fields  # noqa: E402
+from .. import db as batr_db
+from ..config import DEFAULT_KEY, DEFAULT_TABLE_PATTERN
+from ..flatbuf import has_cjk, has_kana, iter_string_fields
+from ..utils.paths import BARegion, resolve_excel_db
+from .base import BaseTap
 
 CLASSES = ("kana", "cjk", "ascii")
 Counter = dict[str, int]  # 类 -> 计数
 
 
-class ScanArgs(Tap):
+class ScanTap(BaseTap):
     """字段级扫描：关键词定位 / 两库对比 / 未覆盖表清单。"""
 
-    db: Positional[Path]  # ExcelDB.db 路径
     keywords: Positional[list[str]] = []  # 要查找的关键词（--uncovered 时可省略）
+    db: Path | None = None  # ExcelDB.db 路径（省略时自动定位游戏安装路径）
+    region: BARegion = "auto"  # 自动定位游戏路径用的区服（auto = global 优先，japan 兜底）
     tables: str = ""  # 表名正则过滤（默认全部表）
     ascii: bool = False  # 连纯拉丁字段一起扫描（allow_ascii）
     limit: int = 30 # 每表每关键词的样本条数
@@ -148,26 +150,28 @@ def print_uncovered(path: str) -> None:
             print(f"  {table}: {n}")
 
 
-def main() -> None:
-    args = ScanArgs().parse_args()
-    if args.uncovered and not args.keywords:
-        print_uncovered(str(args.db))
-        return
-    if not args.keywords:
+def handle_scan(args: ScanTap) -> int:
+    """处理 scan 子命令（args 为合并了子命令属性的主 namespace）。"""
+    db = resolve_excel_db(args.db, args.region)
+    if db is None:
+        print("未指定 --db 且未能从注册表定位游戏安装路径；请显式给出 --db，或用 --region 指定区服")
+        return 1
+    keywords: list[str] = args.keywords
+    if args.uncovered and not keywords:
+        print_uncovered(str(db))
+        return 0
+    if not keywords:
         print("至少给一个关键词（或使用 --uncovered）")
-        sys.exit(2)
+        return 2
     tables_re = re.compile(args.tables, re.IGNORECASE) if args.tables else None
     if args.diff:
-        counts_a, _ = scan_db(str(args.db), args.keywords, tables_re=tables_re,
+        counts_a, _ = scan_db(str(db), keywords, tables_re=tables_re,
                               ascii_on=args.ascii, limit=0)
-        counts_b, _ = scan_db(str(args.diff), args.keywords, tables_re=tables_re,
+        counts_b, _ = scan_db(str(args.diff), keywords, tables_re=tables_re,
                               ascii_on=args.ascii, limit=0)
-        print_diff(str(args.db), str(args.diff), args.keywords, counts_a, counts_b)
-        return
-    counts, samples = scan_db(str(args.db), args.keywords, tables_re=tables_re,
+        print_diff(str(db), str(args.diff), keywords, counts_a, counts_b)
+        return 0
+    counts, samples = scan_db(str(db), keywords, tables_re=tables_re,
                               ascii_on=args.ascii, limit=args.limit)
-    print_scan(str(args.db), args.keywords, counts, samples)
-
-
-if __name__ == "__main__":
-    main()
+    print_scan(str(db), keywords, counts, samples)
+    return 0

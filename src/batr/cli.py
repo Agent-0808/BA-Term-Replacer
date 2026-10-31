@@ -1,26 +1,18 @@
-"""batr 命令行入口"""
+# cli.py
+"""batr 命令行入口：注册子命令并分发（命令实现在 commands/ 包）。"""
 from __future__ import annotations
 
-import os
 import sys
-from pathlib import Path
-from typing import Literal
+from typing import Callable
 
-from tap import Tap, Positional
+from tap import Tap
 
-from . import __version__, patch as patch_mod
-from .config import (
-    DEFAULT_CONVERT,
-    DEFAULT_KEY,
-    DEFAULT_NAMES_GLOSSARY,
-    DEFAULT_NAMES_LOCAL,
-    DEFAULT_OUT_DIR,
-    DEFAULT_TABLE_PATTERN,
-    DEFAULT_TERMS_GLOSSARY,
-    DEFAULT_TEXT_GLOSSARY,
-    DEFAULT_TEXT_LOCAL,
-)
-from .glossary import Glossary
+from . import __version__
+from .commands.export import ExportTap, handle_export
+from .commands.glossary import GlossaryTap, handle_glossary
+from .commands.patch import PatchTap, handle_patch
+from .commands.paths import PathsTap, handle_paths
+from .commands.scan import ScanTap, handle_scan
 
 
 def _setup_stdout() -> None:
@@ -32,79 +24,46 @@ def _setup_stdout() -> None:
             pass
 
 
-class BaseTap(Tap):
-    """基础 Tap 类，提供共享配置。"""
+class MainTap(Tap):
+    """主 Tap 类，包含所有子命令。"""
 
     def configure(self) -> None:
+        self.description = f"batr {__version__} — 蔚蓝档案国际服（GL）译名替换 / 繁简转换工具"
         self._underscores_to_dashes = True
+        self.add_subparsers(dest="command", help="可用命令")
+        self.add_subparser("patch", PatchTap, help="字段级文本补丁 + CRC 修正，--install 可覆盖安装到游戏目录")
+        self.add_subparser("scan", ScanTap, help="字段级扫描：关键词定位 / 两库对比 / 未覆盖表清单")
+        self.add_subparser("export", ExportTap, help="把数据库文本导出成每表一个 TSV")
+        self.add_subparser("glossary", GlossaryTap, help="词表生成：自动表（默认）或自制模板（--template）")
+        self.add_subparser("paths", PathsTap, help="显示检测到的游戏安装路径与 ExcelDB.db 路径")
 
 
-class PatchArgs(BaseTap):
-    """字段级文本补丁（支持变长替换）+ CRC 追加修正（产出可直接使用的库）。"""
-
-    db: Positional[Path]  # 输入 ExcelDB.db（不会被修改）
-    out: Path | None = None  # 输出库（另存，CRC32 与输入一致；默认 output/<输入文件名>，--dry-run 时可省略）
-    key: str = DEFAULT_KEY  # 32 字节 SQLCipher 密钥（hex）
-    convert: Literal["tw2sp", "t2s", "none"] = DEFAULT_CONVERT  # tw2sp 含台湾用词转换，t2s 只转字形，none 只做替换表
-    convert_kana: bool = False  # 不跳过含假名的字段（默认跳过：日文列在 GL 是死数据）
-    no_ascii_exact: bool = False  # 不替换纯 ASCII 字段（如角色名 "Kei"）
-    tables: str = DEFAULT_TABLE_PATTERN  # 限定要处理的表名正则
-    extra_bytes: str = "08080808"  # CRC 修正前附加到输出末尾的自定义字节（hex）
-    names: list[Path] = []  # 角色名表（exact 整字段匹配），默认 glossary/names.tsv
-    text: list[Path] = []  # 正文替换表（sub 子串匹配），默认 glossary/text.tsv
-    dry_run: bool = False  # 只统计会改什么，不写任何文件
-    verify: bool = False  # 完成后对输出库跑 PRAGMA integrity_check
-
-
-def _cmd_patch(args: PatchArgs) -> int:
-    # 省略 --out 时默认写到 output/<输入文件名>（--dry-run 无输出，可省略）
-    out = args.out or Path(DEFAULT_OUT_DIR) / args.db.name
-    try:
-        extra: bytes | None = bytes.fromhex(args.extra_bytes.removeprefix("0x"))
-    except ValueError:
-        print("--extra-bytes 需要偶数长度的 hex 字符串，如 DEADBEEF")
-        return 1
-    # 手工表排在最前（重复键先出现者优先），自动生成的表其次，通用专名表最后（个人优先于共享）。
-    names_paths = args.names or [DEFAULT_NAMES_LOCAL, DEFAULT_NAMES_GLOSSARY]
-    text_paths = args.text or [DEFAULT_TEXT_LOCAL, DEFAULT_TEXT_GLOSSARY]
-    if os.path.exists(DEFAULT_TERMS_GLOSSARY):
-        text_paths = [*text_paths, DEFAULT_TERMS_GLOSSARY]
-    glossary: Glossary | None = None
-    if any(os.path.exists(p) for p in names_paths + text_paths):
-        try:
-            glossary = Glossary.load(
-                [p for p in names_paths if os.path.exists(p)],
-                [p for p in text_paths if os.path.exists(p)],
-            )
-        except OSError as exc:
-            print(f"无法读取词表: {exc}")
-            return 1
-    patch_mod.patch_database(
-        args.db,
-        out,
-        key=args.key,
-        convert=args.convert,
-        skip_kana=not args.convert_kana,
-        tables=args.tables,
-        extra_bytes=extra,
-        glossary=glossary,
-        ascii_exact=not args.no_ascii_exact,
-        dry_run=args.dry_run,
-        verify=args.verify,
-    )
-    return 0
+# --- 命令映射 ---
+COMMAND_HANDLERS: dict[str, Callable[..., int]] = {
+    "patch": handle_patch,
+    "scan": handle_scan,
+    "export": handle_export,
+    "glossary": handle_glossary,
+    "paths": handle_paths,
+}
 
 
 def main(argv: list[str] | None = None) -> int:
     _setup_stdout()
-    if argv is None:
-        argv = sys.argv[1:]
+    argv = sys.argv[1:] if argv is None else list(argv)
     if "--version" in argv:
         print(f"batr {__version__}")
         return 0
-    args = PatchArgs().parse_args(argv)
+    if not argv:
+        MainTap().print_help()
+        return 2
+    args = MainTap().parse_args(argv)
+    handler = COMMAND_HANDLERS.get(getattr(args, "command", None))
+    if handler is None:
+        MainTap().print_help()
+        return 2
     try:
-        return _cmd_patch(args)
+        return handler(args)
     except KeyboardInterrupt:
         print("\n已中止（不会留下半成品）")
         return 130
