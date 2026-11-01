@@ -2,12 +2,12 @@
 """scan 子命令：字段级扫描（调试工具），关键词在哪些表、哪些字段、以什么形态出现。
 
 用法（db 省略时自动定位游戏客户端内的库）：
-    uv run batr scan <关键词...> [--db <db>] [--tables 正则] [--ascii] [--limit N]
+    uv run batr scan <关键词...> [--db <db>] [--tables 正则] [--ascii] [--kana] [--limit N]
     uv run batr scan <关键词...> --diff <另一个db>   # 两库命中数对比（验证替换效果）
     uv run batr scan --uncovered                    # 未匹配默认表正则但含中文字段的表
 
-字段按三类统计：kana（含假名，日文死数据，只计数不出样本）/ cjk（中文字段）/ ascii（纯拉丁，
-默认不扫，--ascii 开启后经 exact 整字段匹配可命中的那类，如角色名的拉丁写法 "Kei"）。
+字段按三类统计：kana（含假名，日文死数据，默认只计数，--kana 开启后也出样本）/ cjk（中文字段）/
+ascii（纯拉丁，默认不扫，--ascii 开启后经 exact 整字段匹配可命中的那类，如角色名的拉丁写法 "Kei"）。
 """
 from __future__ import annotations
 
@@ -35,14 +35,16 @@ class ScanTap(BaseTap):
     db: Path | None = None  # ExcelDB.db 路径（省略时自动定位游戏安装路径）
     region: BARegion = "auto"  # 自动定位游戏路径用的区服（auto = global 优先，japan 兜底）
     tables: str = ""  # 表名正则过滤（默认全部表）
-    ascii: bool = False  # 连纯拉丁字段一起扫描（allow_ascii）
+    ascii: bool = False  # 纯拉丁的字段也输出
+    kana: bool = False  # 含假名的字段也输出
     limit: int = 30 # 每表每关键词的样本条数
     diff: Path | None = None  # 再扫另一个库，输出两库命中数对比（验证替换效果）
     uncovered: bool = False  # 列出未匹配默认表正则但含中文字段的表
 
 
 def scan_db(
-    path: str, keywords: list[str], *, tables_re: re.Pattern | None, ascii_on: bool, limit: int
+    path: str, keywords: list[str], *, tables_re: re.Pattern | None, ascii_on: bool,
+    limit: int, kana_on: bool = False
 ) -> tuple[dict[str, dict[str, Counter]], dict[str, dict[str, list[str]]]]:
     """扫一个库：返回（表 -> 关键词 -> 各类计数, 表 -> 关键词 -> 样本文本）。"""
     counts: dict[str, dict[str, Counter]] = defaultdict(lambda: defaultdict(dict))
@@ -77,8 +79,8 @@ def scan_db(
                             continue
                         c = counts[table][kw]
                         c[cls] = c.get(cls, 0) + 1
-                        # 假名字段只计数；样本去重，截到 limit 条
-                        if cls != "kana" and len(samples[table][kw]) < limit \
+                        # 假名字段默认只计数；样本去重，截到 limit 条
+                        if (cls != "kana" or kana_on) and len(samples[table][kw]) < limit \
                                 and text not in samples[table][kw]:
                             samples[table][kw].append(text)
     finally:
@@ -172,6 +174,6 @@ def handle_scan(args: ScanTap) -> int:
         print_diff(str(db), str(args.diff), keywords, counts_a, counts_b)
         return 0
     counts, samples = scan_db(str(db), keywords, tables_re=tables_re,
-                              ascii_on=args.ascii, limit=args.limit)
+                              ascii_on=args.ascii, limit=args.limit, kana_on=args.kana)
     print_scan(str(db), keywords, counts, samples)
     return 0
