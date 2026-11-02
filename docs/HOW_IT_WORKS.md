@@ -228,8 +228,8 @@ sub 是**单趟扫描、最长键优先、不级联**：输出一旦产生就不
 
 ### 5.5 词表来源（[make\_kivowiki\_names.py](../scripts/make_kivowiki_names.py)）
 
-- 数据源：[KivoWiki（基沃托斯古书馆）](https://kivo.wiki/) 民译，经 [BA-characters-internal-id](https://github.com/Agent-0808/BA-characters-internal-id) 的 [`students.json`](https://agent-0808.github.io/BA-characters-internal-id/data/students.json) 分发，缓存在 `work/students.json`；
-- 键 = 官方繁体名的**名段**（官方名带姓带空格，游戏文本只出现名）；值 = 民间简体名对应段。
+- 数据源：[KivoWiki（基沃托斯古书馆）](https://kivo.wiki/) 民译，经 [BA-characters-internal-id](https://github.com/Agent-0808/BA-characters-internal-id) 的 [`students.json`](https://agent-0808.github.io/BA-characters-internal-id/data/students.json)（姓名分离为 `family_name_*` / `given_name_*` 字段）与 [`skin_map.json`](https://agent-0808.github.io/BA-characters-internal-id/data/skin_map.json)（皮肤基名各语言译名）分发，缓存在 `work/BACII_students.json` / `work/BACII_skin_map.json`；
+- 键 = kivo 繁体字段（名段 `given_name_tw`、全名连写、皮肤繁中名）；值 = kivo 无后缀简中民译字段（`given_name` / `family_name`）。
   - 全名连写（姓氏连写形式）单独生成一条，如`聖園彌香 → 圣园未花`；
   - 皮肤名以 `角色名(皮肤)` 内嵌形式出现，text 表用**带括号的键** ，如`(單車) → (骑行服)`，只命中括号内，不动正文里的裸词；注意游戏内使用半角括号。
 - 过滤：OpenCC t2s 后已相等（无需词条）、空键、黑名单（`blacklist.txt` 客观入库 / `blacklist.local.txt` 个人，可加第二列限定只禁 `names` 或 `text` 表）、`*.local.tsv` 已有键（用户自维护，不再生成）。

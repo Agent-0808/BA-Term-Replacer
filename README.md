@@ -48,7 +48,7 @@ uv run batr glossary             # 繁→简用：names.tsv（角色名）+ text
 uv run batr glossary --template  # 繁→繁用：names_custom.tsv 恒等行模板 + text_custom.tsv 空表
 ```
 
-- 自动表自动拉取民译数据（缓存于 `work/students.json`，`--refresh` 强制重新下载），生成后繁→简流程即可直接使用。
+- 自动表自动拉取民译数据（缓存于 `work/BACII_students.json` 与 `work/BACII_skin_map.json`，`--refresh` 强制重新下载），生成后繁→简流程即可直接使用。
 - `--template` 生成的 `names_custom.tsv` 每行都是恒等行（如`彌香<TAB>彌香`），把右列改成你要的繁体译名即生效；没改的行加载时自动跳过，不会产生替换。`text_custom.tsv` 需要手写（地名/术语等）。
 
 ### 2. 修改词表

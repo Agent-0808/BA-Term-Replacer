@@ -3,8 +3,11 @@
 
 自动表模式（默认，繁→简流程）：
     uv run batr glossary [--refresh] [--no-text]
-* 数据源：https://agent-0808.github.io/BA-characters-internal-id/data/students.json
-  缓存到 work/students.json（--refresh 重新下载）。
+* 数据源：KivoWiki 民译，经 BA-characters-internal-id 分发：
+    students.json  姓名（姓/名已分离为 family_name_* / given_name_* 字段）
+    skin_map.json  皮肤基名的各语言译名（键 = 简中基名）
+  缓存到 work/BACII_students.json / work/BACII_skin_map.json（--refresh 重新下载；
+  旧格式缓存 —— 无 given_name_tw 字段 —— 视为过期自动重下）。
 * 输出两张表（**每次完整重新生成**，手工内容不在其中）：
     glossary/names.tsv  exact 整字段匹配（角色名字段，如剧情说话人栏）
     glossary/text.tsv   sub 子串匹配（正文里出现的角色名）
@@ -14,15 +17,18 @@
 * 黑名单（glossary/blacklist.txt 客观项入库共享、glossary/blacklist.local.txt 个人项不入库）：
   一行一个键，可选第二列限定生效表（names / text），不写则两表都禁用。
   例：`希望<TAB>text` 让整字段匹配照常生成、但正文子串替换不生成（避免误伤普通词）。
-* 规则：键 = name_tw 的「名」段（空格分隔取最后一段）；值 = 民间简体名（name/name_cn
-  中与 name_tw 空格结构一致者）的对应段。t2s 转换后已相等、空的键跳过。
-  皮肤名（skin_tw -> skin）同理生成。上游分开姓/名字段后，改「名段切分」处即可。
+* 规则：键 = kivo 繁中字段（given_name_tw 名段 / family_name_tw+given_name_tw 全名连写）；
+  值 = kivo 无后缀字段（given_name / family_name，即简中民译；kivo 字段必定有值）。
+  t2s 转换后已相等、空的键跳过。
+* 皮肤词条完全来自 skin_map.json：键（简中基名）为值、tw 字段（繁中基名）为键。
+  text 表用带括号的键（如 (單車) -> (骑行服)），只命中「角色名(皮肤)」复合串，
+  不误伤正文里的裸词（如單車）。
 * 纯 ASCII 键不再跳过（游戏里有 Kei / Ain / Aur / Soph 这类拉丁字母角色名，
   民译会换成汉字，需生成词条）；若某条 ASCII 键在正文替换有误伤风险，按需写进黑名单。
 
 模板模式（--template，繁→繁民译流程）：
     uv run batr glossary --template [--refresh]
-* 数据源同自动表（students.json）。
+* 数据源同自动表（students.json + skin_map.json）。
 * 输出 glossary/names_custom.tsv（exact 整字段匹配）：
   key 列 = 繁体原名（名段 / 全名连写 / 皮肤名），value 列默认**与 key 相同**（恒等行），
   用户直接把右列改成自己的繁体民译名即可，不用自己想 key 怎么写。
@@ -50,7 +56,9 @@ from ..convert import Converter
 from .base import BaseTap
 
 URL = "https://agent-0808.github.io/BA-characters-internal-id/data/students.json"
-CACHE = "work/students.json"
+SKIN_MAP_URL = "https://agent-0808.github.io/BA-characters-internal-id/data/skin_map.json"
+CACHE = "work/BACII_students.json"         # BACII（BA-characters-internal-id）students.json 缓存
+CACHE_SKIN_MAP = "work/BACII_skin_map.json"  # BACII skin_map.json 缓存
 OUT_NAMES = DEFAULT_NAMES_GLOSSARY          # glossary/names.tsv
 OUT_TEXT = DEFAULT_TEXT_GLOSSARY            # glossary/text.tsv
 LOCAL_NAMES = DEFAULT_NAMES_LOCAL           # 手工角色名表（本地，不入库，优先级更高）
@@ -107,18 +115,28 @@ class GlossaryTap(BaseTap):
     """词表生成：自动表（默认）或自制模板（--template）。"""
 
     template: bool = False  # 生成自制词表模板（繁->繁民译用）而不是自动表
-    refresh: bool = False  # 强制重新下载 students.json
+    refresh: bool = False  # 强制重新下载 kivo 数据（students.json / skin_map.json）
     no_text: bool = False  # 只生成 names 表，不生成 text 表（仅自动表模式）
 
 
-def download(refresh: bool) -> list[dict]:
-    if refresh or not os.path.exists(CACHE):
-        print(f"下载 {URL} -> {CACHE}")
-        os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-        with urllib.request.urlopen(URL) as resp, open(CACHE, "wb") as f:
+def fetch_json(url: str, cache: str, refresh: bool) -> list | dict:
+    if refresh or not os.path.exists(cache):
+        print(f"下载 {url} -> {cache}")
+        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        with urllib.request.urlopen(url) as resp, open(cache, "wb") as f:
             f.write(resp.read())
-    with open(CACHE, encoding="utf-8") as f:
+    with open(cache, encoding="utf-8") as f:
         return json.load(f)
+
+
+def download(refresh: bool) -> tuple[list[dict], dict[str, dict]]:
+    """拉取 kivo 数据：返回 (students, skin_map)。旧格式缓存（无 given_name_tw）自动重下。"""
+    students = fetch_json(URL, CACHE, refresh)
+    if students and "given_name_tw" not in students[0]:
+        print("检测到旧格式缓存（姓名未分离），重新下载")
+        students = fetch_json(URL, CACHE, True)
+    skin_map = fetch_json(SKIN_MAP_URL, CACHE_SKIN_MAP, refresh)
+    return students, skin_map
 
 
 def load_blacklist() -> tuple[set[str], set[str]]:
@@ -192,24 +210,6 @@ def local_keys(path: str) -> set[str]:
     return keys
 
 
-def given(full: str) -> str:
-    """「名段切分」：官方名带姓带空格（聖園 彌香），游戏文本只出现名 -> 取最后一段。"""
-    return full.split()[-1] if " " in full.strip() else full.strip()
-
-
-def fansub_full(tw: str, name: str, name_cn: str) -> str:
-    """选简体全名字段：name_tw 带空格时优先取**同样带空格**的字段，否则切不出「名」段。
-
-    上游数据空格不统一（如 初音 未來 -> name「初音未来」、name_cn「初音 未来」），
-    直接取 name 会把整串当成名段，生成「未來 -> 初音未来」这种错误条目。
-    """
-    if " " in tw:
-        for cand in (name, name_cn):
-            if " " in cand:
-                return cand
-    return name or name_cn
-
-
 def add_entry(
     target: dict[str, str],
     key: str,
@@ -257,6 +257,7 @@ def report(label: str, stats: dict[str, int], dup: dict[str, str]) -> None:
 
 def build(
     students: list[dict],
+    skin_map: dict[str, dict],
     black_names: set[str],
     black_text: set[str],
     *,
@@ -264,7 +265,7 @@ def build(
     covered_text: set[str] | None = None,
     with_text: bool = True,
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """按规则生成两张自动表（键 = 繁体名，值 = 民间简体名）。
+    """按规则生成两张自动表（键 = kivo 繁中名，值 = kivo 简中民译）。
 
     covered_* = *.local.tsv 里已有的键：用户已手工维护，自动表不再生成同键。
     """
@@ -287,26 +288,29 @@ def build(
                       conv=conv, stats=s_text, dup=dup_text)
 
     for st in students:
-        tw = (st.get("name_tw") or "").strip()
-        name = fansub_full(tw, (st.get("name") or "").strip(), (st.get("name_cn") or "").strip())
-        if tw and name:
-            given_tw = given(tw)
-            feed(given_tw, given(name))
-            # 全名连写规则（仅中日文姓名：游戏正文里姓与名连写；拉丁字母名正文保留空格）
-            # 名段被黑名单禁用时，由它派生的全名一并禁用（否则「黑名单 三森」仍会替换 水羽三森）
-            joined_tw = tw.replace(" ", "")
-            if not joined_tw.isascii() and given_tw not in black_names:
-                feed(joined_tw, name.replace(" ", ""))
-        # 皮肤名：游戏里以「角色名(皮肤)」的内嵌形式出现（如 白子(單車)、瀬奈(私服)），
-        # 正文表因此用**带括号的键**，只命中括号内的皮肤词，不误伤正文里的裸词（如單車）。
-        for page in st.get("pages", []):
-            skin_tw = (page.get("skin_tw") or "").strip()
-            skin = (page.get("skin") or "").strip() or (page.get("skin_cn") or "").strip()
-            if skin_tw and skin:
-                feed(skin_tw, skin)  # names：整字段兜底（少数界面单独显示皮肤名）
-                if with_text:
-                    add_entry(auto_text, f"({skin_tw})", f"({skin})", blocked=black_text,
-                              covered=covered_text, conv=conv, stats=s_text, dup=dup_text)
+        family_tw = (st.get("family_name_tw") or "").strip()
+        given_tw = (st.get("given_name_tw") or "").strip()
+        if not family_tw and not given_tw:
+            continue
+        # 名段：游戏文本只出现名（kivo 字段必定有值；无姓角色全名即名段）
+        feed(given_tw, (st.get("given_name") or "").strip())
+        # 全名连写（仅非拉丁姓名：游戏正文里姓与名连写）；
+        # 名段被黑名单禁用时，由它派生的全名一并禁用（否则「黑名单 三森」仍会替换 水羽三森）
+        joined_tw = family_tw + given_tw
+        if family_tw and not joined_tw.isascii() and given_tw not in black_names:
+            feed(joined_tw, (st.get("family_name") or "").strip() + (st.get("given_name") or "").strip())
+
+    # 皮肤词条：完全来自 kivo skin_map（键 = 简中基名，tw = 繁中基名）。
+    # text 表用带括号的键（如 (單車) -> (骑行服)），只命中「角色名(皮肤)」复合串，
+    # 不误伤正文里的裸词（如單車）。
+    for base, loc in skin_map.items():
+        skin_tw = (loc.get("tw") or "").strip()
+        if not skin_tw:
+            continue
+        feed(skin_tw, base)  # names：整字段兜底（少数界面单独显示皮肤名）
+        if with_text:
+            add_entry(auto_text, f"({skin_tw})", f"({base})", blocked=black_text,
+                      covered=covered_text, conv=conv, stats=s_text, dup=dup_text)
 
     report("names", s_names, dup_names)
     if with_text:
@@ -314,24 +318,23 @@ def build(
     return auto_names, auto_text
 
 
-def collect_keys(students: list[dict], blacklist: set[str]) -> list[str]:
+def collect_keys(students: list[dict], skin_map: dict[str, dict], blacklist: set[str]) -> list[str]:
     """与自动表相同的数据切分（名段 / 全名连写 / 皮肤名），按出现顺序去重（模板模式用）。"""
     keys: dict[str, None] = {}
     for st in students:
-        tw = (st.get("name_tw") or "").strip()
-        name = fansub_full(tw, (st.get("name") or "").strip(), (st.get("name_cn") or "").strip())
-        if tw and name:
-            given_tw = given(tw)
-            keys.setdefault(given_tw, None)
-            # 名段被黑名单禁用时同时略过其全名（与自动表的生成规则一致）
-            joined_tw = tw.replace(" ", "")
-            if not joined_tw.isascii() and given_tw not in blacklist:
-                keys.setdefault(joined_tw, None)
-        for page in st.get("pages", []):
-            skin_tw = (page.get("skin_tw") or "").strip()
-            skin = (page.get("skin") or "").strip() or (page.get("skin_cn") or "").strip()
-            if skin_tw and skin:
-                keys.setdefault(skin_tw, None)
+        family_tw = (st.get("family_name_tw") or "").strip()
+        given_tw = (st.get("given_name_tw") or "").strip()
+        if not family_tw and not given_tw:
+            continue
+        keys.setdefault(given_tw, None)
+        # 名段被黑名单禁用时同时略过其全名（与自动表的生成规则一致）
+        joined_tw = family_tw + given_tw
+        if family_tw and not joined_tw.isascii() and given_tw not in blacklist:
+            keys.setdefault(joined_tw, None)
+    for loc in skin_map.values():
+        skin_tw = (loc.get("tw") or "").strip()
+        if skin_tw:
+            keys.setdefault(skin_tw, None)
     return [k for k in keys if k and k not in blacklist]
 
 
@@ -384,17 +387,17 @@ def write_text_custom(path: str) -> None:
 
 def handle_glossary(args: GlossaryTap) -> int:
     """处理 glossary 子命令（args 为合并了子命令属性的主 namespace）。"""
-    students = download(args.refresh)
+    students, skin_map = download(args.refresh)
     ensure_local_blacklist()
     if args.template:
         black_names, _ = load_blacklist()  # 模板只生成角色名表，取 names 范围
-        write_names_custom(OUT_NAMES_CUSTOM, collect_keys(students, black_names))
+        write_names_custom(OUT_NAMES_CUSTOM, collect_keys(students, skin_map, black_names))
         write_text_custom(OUT_TEXT_CUSTOM)
         return 0
     ensure_local_tables()
     black_names, black_text = load_blacklist()
     auto_names, auto_text = build(
-        students, black_names, black_text,
+        students, skin_map, black_names, black_text,
         covered_names=local_keys(LOCAL_NAMES),
         covered_text=local_keys(LOCAL_TEXT),
         with_text=not args.no_text,
