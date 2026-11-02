@@ -22,6 +22,7 @@ import shutil
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from . import db
@@ -82,6 +83,7 @@ def patch_database(
     extra_bytes: bytes | None = None,
     glossary: Glossary | None = None,
     ascii_exact: bool = True,
+    hit_log: str | None = None,
     dry_run: bool = False,
     verify: bool = False,
     log=print,
@@ -93,6 +95,7 @@ def patch_database(
     extra_bytes: CRC 修正前附加到输出末尾的自定义字节，修正后的 CRC 仍与输入一致。
     glossary: 译名对照表（先于 OpenCC 匹配，键为繁体原文）。
     ascii_exact: 纯 ASCII 字段是否参与 exact 整字段匹配（见 _make_transforms）。
+    hit_log: 逐规则命中日志的输出路径（TSV，结束时覆盖写入；None/none 关闭，dry-run 也写）。
     dry_run 时直接只读打开 src 统计，不写任何文件。
     """
     src, dst = Path(src), Path(dst)  # 兼容 str 入参
@@ -117,13 +120,27 @@ def patch_database(
     log(f"输入 CRC32 = {stats.target_crc:08X}（输出将与之对齐）")
 
     def log_glossary_hits() -> None:
-        """逐规则命中数：零命中 = 拼错/过期词条的主要排查线索。"""
+        """逐规则命中数：零命中 = 拼错/过期词条的主要排查线索；同时落盘 TSV 日志。"""
         if glossary is None:
             return
-        for old in list(glossary.exact_map) + list(glossary.sub_map):
-            new = glossary.exact_map.get(old) or glossary.sub_map.get(old, "")
-            mode = "exact" if old in glossary.exact_map else "sub"
-            log(f"  glossary[{old} -> {new}] mode={mode} hits={glossary.hits[old]}")
+        rows: list[str] = []
+        for (old, mode), count in glossary.hits.items():
+            new = glossary.exact_map.get(old) if mode == "exact" else glossary.sub_map.get(old, "")
+            src = glossary.sources.get((old, mode)) or "-"
+            rows.append(f"{old}\t{new}\t{mode}\t{src}\t{count}")
+            log(f"  glossary[{old} -> {new}] mode={mode} hits={count}")
+        if not hit_log or hit_log == "none":
+            return
+        path = Path(hit_log)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # hits 降序（同值保持编译顺序），零命中沉底，便于清理过期/拼错词条
+        rows.sort(key=lambda row: -int(row.rsplit("\t", 1)[1]))
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"# batr patch 词表命中日志（生成于 {stamp}）\n")
+            f.write("# 旧词\t新词\tmode\tsource\thits\n")
+            f.writelines(row + "\n" for row in rows)
+        log(f"词表命中日志已写入: {path}")
 
     work = dst.with_name(dst.name + ".tmp") if not dry_run else src
     if not dry_run:

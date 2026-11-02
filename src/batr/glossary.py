@@ -69,7 +69,8 @@ class Glossary:
     """双词表 + 逐规则命中计数（审计用）。"""
     exact_map: dict[str, str] = field(default_factory=dict)  # exact：旧词 -> 新词
     sub_map: dict[str, str] = field(default_factory=dict)    # sub：旧词 -> 新词
-    hits: dict[str, int] = field(default_factory=dict)       # 旧词 -> 命中次数
+    hits: dict[tuple[str, str], int] = field(default_factory=dict)   # (旧词, mode) -> 命中次数
+    sources: dict[tuple[str, str], str] = field(default_factory=dict)  # (旧词, mode) -> 来源（compiled.tsv 第 4 列）
     sub_maxlen: int = 0                                      # sub 键最大长度（匹配上界）
 
     @classmethod
@@ -86,6 +87,7 @@ class Glossary:
                     print(f"[glossary] {path}:{ln} 跳过无效行 {line!r}")
                     continue
                 old, new, mode = parts[0].strip(), parts[1], parts[2].strip().lower()
+                src = parts[3].strip() if len(parts) > 3 else ""
                 if old == new:
                     continue  # 恒等行（未填写的脚手架）
                 if mode not in MODES:
@@ -98,14 +100,15 @@ class Glossary:
                 target[old] = new
                 if mode == "sub":
                     g.sub_maxlen = max(g.sub_maxlen, len(old))
-                g.hits.setdefault(old, 0)
+                g.hits.setdefault((old, mode), 0)
+                g.sources[(old, mode)] = src
         return g
 
     def apply(self, text: str) -> str:
         """先 exact（整字段相等），后 sub（单趟、最长键优先），并累计命中数。"""
         new = self.exact_map.get(text)
         if new is not None:
-            self.hits[text] += 1
+            self.hits[(text, "exact")] += 1
             return new
         if not self.sub_map:
             return text
@@ -117,7 +120,7 @@ class Glossary:
                 new = self.sub_map.get(seg)
                 if new is not None:
                     out.append(new)
-                    self.hits[seg] += 1
+                    self.hits[(seg, "sub")] += 1
                     i += ln
                     break
             else:
@@ -132,5 +135,5 @@ class Glossary:
         """
         new = self.exact_map.get(text)
         if new is not None:
-            self.hits[text] += 1
+            self.hits[(text, "exact")] += 1
         return new

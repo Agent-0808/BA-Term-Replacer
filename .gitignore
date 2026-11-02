@@ -23,4 +23,5 @@ desktop.ini
 # glossary/：shared/（共识）与 templates/（模板）跟踪；local/（个人词表）与编译产物不入库
 glossary/local/
 glossary/compiled.tsv
+glossary/hits.tsv
 output/

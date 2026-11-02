@@ -16,6 +16,7 @@ from ..config import (
     DEFAULT_OUT_DIR,
     DEFAULT_TABLE_PATTERN,
     GLOSSARY_COMPILED,
+    GLOSSARY_HITS,
     GLOSSARY_PROFILES,
 )
 from ..glossary import Glossary
@@ -36,6 +37,7 @@ class PatchTap(BaseTap):
     tables: str = DEFAULT_TABLE_PATTERN  # 限定要处理的表名正则
     extra_bytes: str = "08080808"  # CRC 修正前附加到输出末尾的自定义字节（hex）
     glossary: Path = Path(GLOSSARY_COMPILED)  # 编译词表产物（batr glossary 生成），替换在 OpenCC 之前
+    hit_log: str = GLOSSARY_HITS  # 逐规则命中日志输出路径（patch 结束时覆盖写入，dry-run 也写）；none 关闭
     dry_run: bool = False  # 只统计会改什么，不写任何文件
     verify: bool = False  # 完成后对输出库跑 PRAGMA integrity_check
     region: BARegion = "auto"  # 自动定位游戏路径用的区服（auto = global 优先，japan 兜底）
@@ -114,6 +116,7 @@ def handle_patch(args: PatchTap) -> int:
         extra_bytes=extra,
         glossary=glossary,
         ascii_exact=not args.no_ascii_exact,
+        hit_log=None if args.hit_log in ("", "none") else args.hit_log,
         dry_run=args.dry_run,
         verify=args.verify,
     )

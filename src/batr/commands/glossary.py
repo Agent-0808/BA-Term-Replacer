@@ -280,7 +280,7 @@ def compile_glossary(
             f.write(f"{old}\t{new}\texact\t{src[old]}\n")
         for old, new in sub.items():
             f.write(f"{old}\t{new}\tsub\t{src[old]}\n")
-    print(f"输出: {out}（exact {len(exact)} 条 / sub {len(sub)} 条）")
+    print(f"输出: {out} （exact {len(exact)} 条 / sub {len(sub)} 条）")
     return 0
 
 
@@ -351,7 +351,7 @@ def write_identity_rows(path: Path, keys: list[str], existing: set[str]) -> None
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         for line in kept:
             f.write(f"{line}\n")
-    print(f"输出: {path}（共 {len(present)} 条，新增 {added} 条，清理陈旧恒等行 {pruned} 条）")
+    print(f"输出: {path} （共 {len(present)} 条，新增 {added} 条，清理陈旧恒等行 {pruned} 条）")
 
 
 def update_template(students: list[dict], skin_map: dict[str, dict]) -> None:

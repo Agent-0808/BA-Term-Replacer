@@ -20,6 +20,7 @@ GLOSSARY_SHARED = f"{GLOSSARY_DIR}/shared"
 GLOSSARY_LOCAL = f"{GLOSSARY_DIR}/local"
 GLOSSARY_TEMPLATES = f"{GLOSSARY_DIR}/templates"
 GLOSSARY_COMPILED = f"{GLOSSARY_DIR}/compiled.tsv"
+GLOSSARY_HITS = f"{GLOSSARY_DIR}/hits.tsv"  # patch 运行时的逐规则命中日志（个人运行数据，不入库）
 
 # 词表 profile：t2s 繁->简（默认，auto 条目编入产物）与 t2t 繁->繁（auto 不编入，
 # 手写值必须繁体；patch 端自动绑定 convert=none）。
