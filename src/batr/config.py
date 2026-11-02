@@ -8,22 +8,23 @@ DEFAULT_KEY = "ef0aaca06f34b4a4be3172a75a3ea565e815f9ece35b1fb12b7a166ba0807bc4"
 DEFAULT_TABLE_PATTERN = r"Localize|Dialog|Scenario|Subtitle|Talk|Mail|Name|Emoji|Voice|Messanger|SNSProfile"
 
 # OpenCC 模式：tw2sp 含台湾用词转换（伺服器->服务器），t2s 只转字形，
-# none 只做替换表、不转字形（繁->繁民译用，配合 glossary/*_custom.tsv）。
+# none 只做替换表、不转字形（繁->繁民译用）。
 DEFAULT_CONVERT = "tw2sp"
 CONVERT_MODES = ("tw2sp", "t2s", "none")
 
-# 译名对照表默认路径（glossary/ 单层布局，繁->简流程用；繁->繁用 *_custom.tsv 显式传入）：
-# names.tsv 角色名表（exact 整字段匹配），text.tsv 正文替换表（sub 子串匹配）。
-DEFAULT_NAMES_GLOSSARY = "glossary/names.tsv"
-DEFAULT_TEXT_GLOSSARY = "glossary/text.tsv"
+# 译名词表目录（三镜像布局：shared/ 客观共识入库可 PR，local/ 个人偏好不入库，
+# templates/ 空模板格式的事实来源）。文件名不承载语义，匹配方式（exact/sub）由
+# 各文件头 "# mode:" 声明；patch 只读编译产物 compiled.tsv，不再自己拼路径。
+GLOSSARY_DIR = "glossary"
+GLOSSARY_SHARED = f"{GLOSSARY_DIR}/shared"
+GLOSSARY_LOCAL = f"{GLOSSARY_DIR}/local"
+GLOSSARY_TEMPLATES = f"{GLOSSARY_DIR}/templates"
+GLOSSARY_COMPILED = f"{GLOSSARY_DIR}/compiled.tsv"
 
-# 手工词表（本地，不入库）：写个人偏好的修正/补充，优先于上面自动生成的表（缺省先加载者优先）。
-DEFAULT_NAMES_LOCAL = "glossary/names.local.tsv"
-DEFAULT_TEXT_LOCAL = "glossary/text.local.tsv"
-
-# 通用专名表（sub 子串匹配，入库共享）：地名/组织/术语的社区通用民译，
-# 存在即始终加载（两种模式都生效），个人词条优先级高于它。
-DEFAULT_TERMS_GLOSSARY = "glossary/terms.tsv"
+# 词表 profile：t2s 繁->简（默认，auto 条目编入产物）与 t2t 繁->繁（auto 不编入，
+# 手写值必须繁体；patch 端自动绑定 convert=none）。
+GLOSSARY_PROFILES = ("t2s", "t2t")
+DEFAULT_GLOSSARY_PROFILE = "t2s"
 
 # 输出目录：省略 --out 时，输出库写到 <该目录>/<输入文件名>。
 DEFAULT_OUT_DIR = "output"

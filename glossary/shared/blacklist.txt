@@ -1,0 +1,53 @@
+# 黑名单（客观项，入库共享）：编译词表时跳过这些键（对自动与手写等一切来源生效）
+# 格式：一行一个繁体键；可选第二列限定匹配方式（exact = 只禁整字段匹配，sub = 只禁子串匹配），不写则两种都禁用
+# 个人喜好类请写 glossary/local/blacklist.txt（不入库）
+
+# 通用词皮肤名：
+武裝	sub
+導覽員	sub
+魔法少女	sub
+
+# 从数据源获取但非角色名，易误伤：
+Mk.0
+
+# 与普通词同形的角色名：整字段匹配保留（角色名表照常生成），仅子串替换跳过，避免误伤
+# 两字名（与普通词冲突）：
+未來	sub
+希望	sub
+月夜	sub
+工人
+
+# 单字名（单字子串替换必误伤普通词）：
+光	sub
+冬	sub
+堇	sub
+夏	sub
+夢	sub
+季	sub
+律	sub
+惠	sub
+憂	sub
+新	sub
+旬	sub
+昴	sub
+晴	sub
+晶	sub
+李	sub
+梓	sub
+椿	sub
+楓	sub
+步	sub
+泉	sub
+渚	sub
+琳	sub
+碧	sub
+空	sub
+紫	sub
+紬	sub
+綠	sub
+翼	sub
+莉	sub
+萌	sub
+薊	sub
+誡	sub
+響	sub

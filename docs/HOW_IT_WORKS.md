@@ -211,48 +211,68 @@ glossary exact（整字段相等） → glossary sub（子串） → OpenCC（--
 - **词组优先于单字**：每层内部最长匹配优先（词组表先试，长度递减），避免"一简对多繁"拆错字。
 - 是 OpenCC 规则的**独立实现**（纯标准库，只读取其词库数据，Apache-2.0）。
 
-### 5.3 双词表设计（[glossary.py](../src/batr/glossary.py)）
+### 5.3 词表模型：编译式（[glossary.py](../src/batr/glossary.py) / [commands/glossary.py](../src/batr/commands/glossary.py)）
 
-| 表                         | 匹配方式            | 用途                                              |
-| ------------------------- | --------------- | ----------------------------------------------- |
-| `names*.tsv`              | **exact** 整字段相等 | 角色名。整字段匹配保证 `旬`/`希望` 这类歧义短词**只**命中真正的名字字段，不误伤正文 |
-| `text*.tsv` / `terms.tsv` | **sub** 子串      | 正文替换（地名/组织/皮肤名等）                                |
+词表流程收敛为两步，所有隐式规则变成显式数据：
+
+```
+batr glossary = 编译：auto 条目 + 手写词表 + 黑名单过滤 → glossary/compiled.tsv（唯一产物）
+batr patch    = 消费：只读 compiled.tsv，不再自己拼词表路径
+```
+
+手写词表放在三镜像目录（name.tsv / text.tsv / blacklist.txt 各一份，三个目录完全镜像）：
+
+| 目录       | 定位                 | 入库？          |
+| -------- | ------------------ | ------------ |
+| `shared/` | 客观共识（可 PR）        | ✅            |
+| `local/`  | 个人偏好（整目录 gitignore）| ❌ 缺文件自动从 `templates/` 复制 |
+| `templates/` | 空模板，格式的事实来源     | ✅            |
+
+**文件名不承载任何语义**：匹配方式由各文件头 `# mode: exact|sub` 声明（缺省 `sub`），用户可按内容任意拆分文件（如 `orgs.tsv`），编译器扫描 `shared/*.tsv` 与 `local/*.tsv` 每一个文件。
+
+| mode    | 匹配方式            | 用途                                              |
+| ------- | --------------- | ----------------------------------------------- |
+| `exact` | **exact** 整字段相等 | 角色名。整字段匹配保证 `旬`/`希望` 这类歧义短词**只**命中真正的名字字段，不误伤正文 |
+| `sub`   | **sub** 子串      | 正文替换（地名/组织/皮肤名等）                                |
 
 sub 是**单趟扫描、最长键优先、不级联**：输出一旦产生就不再参与匹配，`A→B` 的结果不会被 `B→C` 再次命中（与 OpenCC 的逐层策略不同，这里是单层内不级联）。
 
-加载优先级：**先加载者优先**——`*.local.tsv`（个人）→ 自动生成的 `names.tsv`/`text.tsv` → `terms.tsv`（入库共享）。同表内重复键保留先出现的并告警；恒等行（模板占位）加载时跳过。每条规则的命中次数被记录，`--dry-run` 时逐条打印 `hits`。
+编译加载顺序：**auto 条目 → shared/*.tsv（文件名字母序）→ local/*.tsv（文件名字母序），后加载者优先**（dict.update 语义，直觉对应「自动 < 共享 < 个人」）；同键覆盖时编译日志报告。同 mode 内重复键保留先出现的并告警；同名键允许跨表（exact/sub 各司其职）；恒等行（模板占位，旧词==新词）加载时跳过。黑名单在**编译期**对一切来源过滤。patch 端零合并逻辑，只 `from_compiled` 加载产物；每条规则的命中次数被记录，`--dry-run` 时逐条打印 `hits`。
 
 ### 5.4 纯 ASCII 字段：只做 exact
 
 资源路径（`UIs/03_Scenario/...`）、内部标识符都是纯 ASCII，做子串替换大概率炸；但游戏里确实存在拉丁字母角色名（`Kei` / `Ain` / `Aur` / `Soph`），民译要换成汉字。所以 ASCII 字段只走 `apply_exact`（整字段相等才替换），`--no-ascii-exact` 可整体关闭。
 
-### 5.5 词表来源（[make\_kivowiki\_names.py](../scripts/make_kivowiki_names.py)）
+### 5.5 auto 条目来源（[commands/glossary.py](../src/batr/commands/glossary.py)）
 
-- 数据源：[KivoWiki（基沃托斯古书馆）](https://kivo.wiki/) 民译，经 [BA-characters-internal-id](https://github.com/Agent-0808/BA-characters-internal-id) 的 [`students.json`](https://agent-0808.github.io/BA-characters-internal-id/data/students.json)（姓名分离为 `family_name_*` / `given_name_*` 字段）与 [`skin_map.json`](https://agent-0808.github.io/BA-characters-internal-id/data/skin_map.json)（皮肤基名各语言译名）分发，缓存在 `work/BACII_students.json` / `work/BACII_skin_map.json`；
+- 数据源：[KivoWiki（基沃托斯古书馆）](https://kivo.wiki/) 民译，经 [BA-characters-internal-id](https://github.com/Agent-0808/BA-characters-internal-id) 的 [`students.json`](https://agent-0808.github.io/BA-characters-internal-id/data/students.json)（姓名分离为 `family_name_*` / `given_name_*` 字段）与 [`skin_map.json`](https://agent-0808.github.io/BA-characters-internal-id/data/skin_map.json)（皮肤基名各语言译名）分发，缓存在 `work/BACII_students.json` / `work/BACII_skin_map.json`（`--refresh` 强制重下）；
 - 键 = kivo 繁体字段（名段 `given_name_tw`、全名连写、皮肤繁中名）；值 = kivo 无后缀简中民译字段（`given_name` / `family_name`）。
   - 全名连写（姓氏连写形式）单独生成一条，如`聖園彌香 → 圣园未花`；
-  - 皮肤名以 `角色名(皮肤)` 内嵌形式出现，text 表用**带括号的键** ，如`(單車) → (骑行服)`，只命中括号内，不动正文里的裸词；注意游戏内使用半角括号。
-- 过滤：OpenCC t2s 后已相等（无需词条）、空键、黑名单（`blacklist.txt` 客观入库 / `blacklist.local.txt` 个人，可加第二列限定只禁 `names` 或 `text` 表）、`*.local.tsv` 已有键（用户自维护，不再生成）。
+  - 皮肤名以 `角色名(皮肤)` 内嵌形式出现，text 用**带括号的键**，如`(單車) → (骑行服)`，只命中括号内，不动正文里的裸词；注意游戏内使用半角括号。
+- auto 条目**不落盘**，每次编译从数据源重新生成，仅在 t2s profile 下编入（t2t 编入会把简中值带进繁→繁流程）。
+- 过滤：OpenCC t2s 后已相等（无需词条）、空键、繁简同形键（如 `御稜名草`，无实际改动）；黑名单（见下）在编译末尾统一过滤。
+- KivoWiki 键与游戏原文偶有差异（如游戏 `白子＊TERROR`、kivo `白子*TERROR`，全角/半角不同）导致 `hits=0`。**不做归一化映射表**：发现一处就在 `shared/` 或 `local/` 手写一条正确键的词条（值与 kivo 民译一致），原 auto 键保留——`hits=0` 本身就是诊断信号，手写条相当于「已知差异」的显式记录，并按后加载覆盖规则生效。排查路径对所有键一致：`batr scan <关键词>` 定位数据库真实写法 → `--dry-run` 看 `hits=0`。
 
 ### 5.6 用户自己加词表
 
-自动表 `names.tsv` / `text.tsv` 是**纯生成物，每次重新生成都会被完整重写，不要直接编辑**；个人内容一律写 `.local` 文件。想加词条时按用途选文件：
+个人内容写 `glossary/local/`（不入库），通用共识写 `glossary/shared/`（可 PR）。判断标准一句话：**这条词条换个玩家是否也该生效？** 该 → `shared/`；只是自己的口味 → `local/`。想加词条时按用途选文件：
 
-| 想改什么                         | 写哪个文件                          | 匹配方式  |
+| 想改什么                         | 写哪个文件                          | mode  |
 | ---------------------------- | ------------------------------ | ----- |
-| 个人角色名译名修正/补充                 | `glossary/names.local.tsv`     | exact |
-| 个人正文替换（台词措辞、皮肤名等）            | `glossary/text.local.tsv`      | sub   |
-| 地名/组织/术语等**通用**词条（可 PR 入库共享） | `glossary/terms.tsv`           | sub   |
-| 禁用某个自动词条                     | `glossary/blacklist.local.txt` | 禁用    |
+| 个人角色名译名修正/补充                 | `glossary/local/name.tsv`     | exact |
+| 个人正文替换（台词措辞、皮肤名等）            | `glossary/local/text.tsv`      | sub   |
+| 地名/组织/术语等**通用**词条（可 PR 入库共享） | `glossary/shared/text.tsv`           | sub   |
+| 禁用某个词条（自动或手写都行）              | `glossary/local/blacklist.txt` | 禁用    |
 
-- `names.local.tsv` / `text.local.tsv` 首次运行 `make_kivowiki_names.py` 时自动生成空模板；`.local` 键会被生成脚本跳过，不产生重复条目。
+- `local/` 缺文件时编译自动从 `templates/` 复制；已存在的不动（删除后重跑得到新空模板）。
 - 格式：`旧词<TAB>新词`
   - **分隔符是 Tab 不是空格**，写错整行被跳过并告警）
-  - `#` 开头是注释
+  - `#` 开头是注释；整文件匹配方式由头部 `# mode: exact|sub` 声明
   - 键必须是数据库里的**繁体原文**——写错即零命中，可以用 `--dry-run` 的 `hits=0` 排查。
-  - 繁→简模式下值写简体或繁体都行（繁体会再过 OpenCC 转简体）；繁→繁模式配合 `--convert none`，值写繁体。
-- 加载优先级见 §5.3：先加载者优先，`.local` 恒在自动表之前，`terms.tsv` 恒在最后。
-- 禁用词条的粒度：黑名单第二列可限定生效表，如 `希望<TAB>text` = 角色名照常替换、正文子串替换跳过（避免误伤普通词"希望"），`键<TAB>names` 反之。
+  - t2s 流程（默认）值写简体或繁体都行（繁体会再过 OpenCC 转简体）；t2t 流程（`--profile t2t`，patch 端自动绑定 `--convert none`）值必须写繁体，用 `batr glossary --template` 在 `local/` 生成恒等行脚手架（右列与左列相同的行 = 未填写，加载时跳过）。
+- 编译优先级见 §5.3：后加载者优先，local 覆盖 shared、手写覆盖 auto。
+- 禁用词条的粒度：黑名单第二列可限定匹配方式，如 `希望<TAB>sub` = 整字段匹配照常替换、正文子串替换跳过（避免误伤普通词"希望"），`键<TAB>exact` 反之，不写则两种都禁用；黑名单对自动与手写**一切来源**生效（`shared/blacklist.txt` 客观入库，`local/blacklist.txt` 个人）。
+- 产物 `glossary/compiled.tsv`（gitignore）是 patch 的唯一输入，注释头记录 profile、生成时间与来源统计；重跑 `batr glossary --profile ...` 即切换流程。
 
 ***
 

@@ -107,7 +107,7 @@ def patch_database(
     else:
         log("convert=none（只做译名对照表）")
     if glossary is not None:
-        log(f"glossary: names={len(glossary.exact_map)} 条  text={len(glossary.sub_map)} 条")
+        log(f"glossary: exact={len(glossary.exact_map)} 条  sub={len(glossary.sub_map)} 条")
     transform, ascii_transform = _make_transforms(conv, glossary)
     if not ascii_exact:
         ascii_transform = None  # 关闭纯 ASCII 字段匹配（不产出这类字段，省一遍扫描）

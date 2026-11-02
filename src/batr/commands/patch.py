@@ -7,19 +7,16 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
 
 from .. import patch as patch_mod
 from ..config import (
+    CONVERT_MODES,
     DEFAULT_CONVERT,
     DEFAULT_KEY,
-    DEFAULT_NAMES_GLOSSARY,
-    DEFAULT_NAMES_LOCAL,
     DEFAULT_OUT_DIR,
     DEFAULT_TABLE_PATTERN,
-    DEFAULT_TERMS_GLOSSARY,
-    DEFAULT_TEXT_GLOSSARY,
-    DEFAULT_TEXT_LOCAL,
+    GLOSSARY_COMPILED,
+    GLOSSARY_PROFILES,
 )
 from ..glossary import Glossary
 from ..utils.paths import BARegion, get_excel_db_path, resolve_excel_db
@@ -32,13 +29,13 @@ class PatchTap(BaseTap):
     db: Path | None = None  # 输入 ExcelDB.db（不会被修改；省略时自动定位游戏安装路径，同 scan/export）
     out: Path | None = None  # 输出库（另存，CRC32 与输入一致；默认 output/<输入文件名>，--dry-run 时可省略）
     key: str = DEFAULT_KEY  # 32 字节 SQLCipher 密钥（hex）
-    convert: Literal["tw2sp", "t2s", "none"] = DEFAULT_CONVERT  # tw2sp 含台湾用词转换，t2s 只转字形，none 只做替换表
+    profile: str = "t2s"  # 词表流程：t2s 繁->简（默认）/ t2t 繁->繁（自动绑定 convert=none）
+    convert: str | None = None  # OpenCC 模式，缺省 tw2sp（t2t profile 下缺省 none）；显式给出则覆盖 profile 缺省
     convert_kana: bool = False  # 不跳过含假名的字段（默认跳过：日文列在 GL 是死数据）
     no_ascii_exact: bool = False  # 不替换纯 ASCII 字段（如角色名 "Kei"）
     tables: str = DEFAULT_TABLE_PATTERN  # 限定要处理的表名正则
     extra_bytes: str = "08080808"  # CRC 修正前附加到输出末尾的自定义字节（hex）
-    names: list[Path] = []  # 角色名表（exact 整字段匹配），默认 glossary/names.tsv
-    text: list[Path] = []  # 正文替换表（sub 子串匹配），默认 glossary/text.tsv
+    glossary: Path = Path(GLOSSARY_COMPILED)  # 编译词表产物（batr glossary 生成），替换在 OpenCC 之前
     dry_run: bool = False  # 只统计会改什么，不写任何文件
     verify: bool = False  # 完成后对输出库跑 PRAGMA integrity_check
     region: BARegion = "auto"  # 自动定位游戏路径用的区服（auto = global 优先，japan 兜底）
@@ -86,6 +83,14 @@ def handle_patch(args: PatchTap) -> int:
     if args.install and args.dry_run:
         print("--install 不能与 --dry-run 同用（预演不产出文件）")
         return 1
+    # convert 缺省按 profile 绑定：t2t 繁->繁自动用 none（不再要用户记参数），显式给出则覆盖
+    if args.profile not in GLOSSARY_PROFILES:
+        print(f"--profile 需为 {' / '.join(GLOSSARY_PROFILES)}")
+        return 1
+    convert = args.convert or ("none" if args.profile == "t2t" else DEFAULT_CONVERT)
+    if convert not in CONVERT_MODES:
+        print(f"--convert 需为 {' / '.join(CONVERT_MODES)}")
+        return 1
     # 省略 --out 时默认写到 output/<输入文件名>（--dry-run 无输出，可省略）
     out = args.out or Path(DEFAULT_OUT_DIR) / db.name
     try:
@@ -93,26 +98,17 @@ def handle_patch(args: PatchTap) -> int:
     except ValueError:
         print("--extra-bytes 需要偶数长度的 hex 字符串，如 DEADBEEF")
         return 1
-    # 手工表排在最前（重复键先出现者优先），自动生成的表其次，通用专名表最后（个人优先于共享）。
-    names_paths = args.names or [DEFAULT_NAMES_LOCAL, DEFAULT_NAMES_GLOSSARY]
-    text_paths = args.text or [DEFAULT_TEXT_LOCAL, DEFAULT_TEXT_GLOSSARY]
-    if os.path.exists(DEFAULT_TERMS_GLOSSARY):
-        text_paths = [*text_paths, DEFAULT_TERMS_GLOSSARY]
+    # 词表只读编译产物（合并顺序、黑名单过滤已在编译期完成，patch 端零合并逻辑）
     glossary: Glossary | None = None
-    if any(os.path.exists(p) for p in names_paths + text_paths):
-        try:
-            glossary = Glossary.load(
-                [p for p in names_paths if os.path.exists(p)],
-                [p for p in text_paths if os.path.exists(p)],
-            )
-        except OSError as exc:
-            print(f"无法读取词表: {exc}")
-            return 1
+    if Path(args.glossary).exists():
+        glossary = Glossary.from_compiled(str(args.glossary))
+    else:
+        print(f"词表产物不存在: {args.glossary}（先运行 batr glossary 生成；本次仅做 OpenCC 转换）")
     patch_mod.patch_database(
         db,
         out,
         key=args.key,
-        convert=args.convert,
+        convert=convert,
         skip_kana=not args.convert_kana,
         tables=args.tables,
         extra_bytes=extra,

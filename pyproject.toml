@@ -1,6 +1,6 @@
 [project]
 name = "batr"
-version = "0.1.0"
+version = "0.2.0"
 description = "BA-Term-Replacer：蔚蓝档案国际服（GL）译名替换 / 繁简转换工具"
 readme = "README.md"
 license = { file = "LICENSE" }

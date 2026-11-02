@@ -34,7 +34,7 @@ class MainTap(Tap):
         self.add_subparser("patch", PatchTap, help="字段级文本补丁 + CRC 修正，--install 可覆盖安装到游戏目录")
         self.add_subparser("scan", ScanTap, help="字段级扫描：关键词定位 / 两库对比 / 未覆盖表清单")
         self.add_subparser("export", ExportTap, help="把数据库文本导出成每表一个 TSV")
-        self.add_subparser("glossary", GlossaryTap, help="词表生成：自动表（默认）或自制模板（--template）")
+        self.add_subparser("glossary", GlossaryTap, help="词表编译：数据源 + 手写词表 + 黑名单 -> glossary/compiled.tsv（--template 生成恒等行模板）")
         self.add_subparser("paths", PathsTap, help="显示检测到的游戏安装路径与 ExcelDB.db 路径")
 
 

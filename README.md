@@ -41,36 +41,38 @@ PC 端支持自动定位 Steam 客户端的 `ExcelDB.db` 文件，`uv run batr p
 
 ### 1. 获取词表
 
-`glossary/` 里入库共享的只有 `blacklist.txt`（客观禁用项）与 `terms.tsv`（通用专名），词表本体需要本地生成：
+词表是编译式的：`batr glossary` 把 auto 条目（KivoWiki 民译）+ 手写词表（`glossary/shared/` 共享、`glossary/local/` 个人）经黑名单过滤后编译成唯一产物 `glossary/compiled.tsv`，patch 只读它：
 
 ```bash
-uv run batr glossary             # 繁→简用：names.tsv（角色名）+ text.tsv（正文），kivowiki 古书馆民译
-uv run batr glossary --template  # 繁→繁用：names_custom.tsv 恒等行模板 + text_custom.tsv 空表
+uv run batr glossary             # 繁→简用（默认）：auto 条目 + 手写词表编入产物
+uv run batr glossary --profile t2t  # 繁→繁用：auto 不编入，只编手写词表
+uv run batr glossary --template  # 往 glossary/local/ 补恒等行脚手架（繁→繁民译用），不编译
 ```
 
-- 自动表自动拉取民译数据（缓存于 `work/BACII_students.json` 与 `work/BACII_skin_map.json`，`--refresh` 强制重新下载），生成后繁→简流程即可直接使用。
-- `--template` 生成的 `names_custom.tsv` 每行都是恒等行（如`彌香<TAB>彌香`），把右列改成你要的繁体译名即生效；没改的行加载时自动跳过，不会产生替换。`text_custom.tsv` 需要手写（地名/术语等）。
+- auto 条目自动拉取民译数据（缓存于 `work/BACII_students.json` 与 `work/BACII_skin_map.json`，`--refresh` 强制重新下载），不落盘、每次编译重新生成。
+- `--template` 往 `local/name.tsv` 追加名段/全名/皮肤名恒等行（如`彌香<TAB>彌香`），往 `local/text.tsv` 追加皮肤括号恒等行；把右列改成你要的繁体译名即生效，没改的行编译加载时自动跳过。
 
 ### 2. 修改词表
 
 | 想要修改 | 修改文件 |
 |---|---|
-| 写自己的角色名译名（繁→繁） | `names_custom.tsv`（改恒等行右列） |
-| 补充/修正译名（繁→简） | `names.local.tsv` / `text.local.tsv`（首次运行自动生成空模板，优先级最高） |
-| 地名/组织/术语 | `terms.tsv`（入库共享，CLI 始终自动加载） |
-| 禁用某个自动词条 | `blacklist.local.txt`（个人喜好）或 `blacklist.txt`（入库共享） |
+| 写自己的角色名译名（繁→繁） | `local/name.tsv`（改恒等行右列，`--template` 生成脚手架） |
+| 补充/修正译名（个人偏好） | `local/name.tsv` / `local/text.tsv`（不入库，后加载优先于 shared） |
+| 地名/组织/术语等通用共识 | `shared/text.tsv`（入库共享，可 PR） |
+| 禁用某个词条（自动或手写都行） | `local/blacklist.txt`（个人喜好）或 `shared/blacklist.txt`（入库共享） |
 
 注意：
 
-- `names.tsv` / `text.tsv` 是纯自动产物，每次重新生成都会被完整重写，不要直接编辑；个人内容一律写 `.local` 文件（重复键以先加载的为准，个人条目优先于自动表）。
+- `local/` 缺文件时编译自动从 `templates/` 复制空模板（已存在的不动）；判断写哪边一句话：**这条词条换个玩家是否也该生效？** 该 → `shared/`，只是自己口味 → `local/`。
+- 匹配方式由各文件头 `# mode: exact|sub` 声明（缺省 sub），文件名不承载语义。
 - 分隔符是 **Tab** 不是空格；键必须是数据库里的繁体原文；值写译文（繁→繁写繁体；繁→简可以简体或繁体，还会通过 OpenCC 转成简体）。
-- 黑名单可加第二列限定生效表：`希望<TAB>text` = 角色名照常生成、正文子串替换跳过（避免误伤普通词），`键<TAB>names` 反之。
-- 皮肤名在 text 表里带括号生成（`(單車) → (骑行服)`），只命中 `白子(單車)` 这类复合串，不会动正文里的「單車」。
+- 黑名单可加第二列限定匹配方式：`希望<TAB>sub` = 角色名整字段照常替换、正文子串替换跳过（避免误伤普通词），`键<TAB>exact` 反之；黑名单在编译期对一切来源生效。
+- 皮肤名带括号的键（`(單車) → (骑行服)`）只命中 `白子(單車)` 这类复合串，不会动正文里的「單車」。
 
 ### 3. 运行命令
 
 #### **繁→简**
-默认：tw2sp + 自动词表 + terms.tsv
+默认：tw2sp + 编译词表
 
 ```bash
 uv run batr patch --dry-run                                  # 预演：逐规则打印命中数，hits=0 多半是键写错
@@ -78,15 +80,12 @@ uv run batr patch --out output/ExcelDB.cn.db --verify        # 正式产出（CR
 ```
 
 #### **繁→繁民译**
-`--convert none` 关闭字形转换；务必显式传 custom 表——默认加载的 names.tsv/text.tsv 值是简体，不覆盖会把文本转成简体：
+先 `glossary --profile t2t` 编译（auto 不编入）+ `--template` 生成恒等行模板填好译文，然后 `--profile t2t` 会自动绑定 `--convert none`：
 
 ```bash
-uv run batr patch --convert none \
-  --names glossary/names_custom.tsv --text glossary/text_custom.tsv --dry-run
-
-uv run batr patch --convert none \
-  --names glossary/names_custom.tsv --text glossary/text_custom.tsv \
-  --out output/ExcelDB.tw.db
+uv run batr glossary --profile t2t && uv run batr glossary --template
+uv run batr patch --profile t2t --dry-run
+uv run batr patch --profile t2t --out output/ExcelDB.tw.db
 ```
 
 PC 端完成后 `uv run batr patch --install` 可直接覆盖安装到游戏目录（覆盖前自动备份原库为 `.bak`）；
@@ -105,7 +104,7 @@ batr <子命令>
   patch      字段级文本补丁（支持变长替换）+ CRC 追加修正，--install 覆盖安装到游戏目录
   scan       字段级扫描（调试）：关键词定位 / 两库对比 / 未覆盖表清单
   export     把目标表的文本字段导出成每表一个 TSV
-  glossary   词表生成：自动表（默认）或自制模板（--template）
+  glossary   词表编译：数据源 + 手写词表 + 黑名单 -> glossary/compiled.tsv（--template 生成恒等行模板）
   paths      显示检测到的游戏安装路径与 ExcelDB.db 路径
 
 patch 常用参数（其余子命令见 -h）：
@@ -116,8 +115,8 @@ patch 常用参数（其余子命令见 -h）：
   --convert-kana     不跳过含假名的字段（默认跳过：日文列在 GL 是死数据）
   --tables <正则>    限定要处理的表（默认 Localize|Dialog|Scenario|...）
   --extra-bytes HEX  CRC 修正前附加到输出末尾的自定义字节（hex，如 DEADBEEF）
-  --names TSV...     角色名表（exact 整字段匹配），默认 names.local.tsv + names.tsv（.local 优先）
-  --text TSV...      正文替换表（sub 子串匹配），默认 text.local.tsv + text.tsv + terms.tsv
+  --profile <流程>   词表流程：t2s 繁→简（默认）/ t2t 繁→繁（自动绑定 convert=none）
+  --glossary <文件>  编译词表产物（默认 glossary/compiled.tsv，batr glossary 生成）
   --no-ascii-exact   关闭纯 ASCII 字段的 exact 匹配（默认开启，覆盖 "Kei" 这类拉丁角色名）
   --key <hex>        覆盖 SQLCipher 密钥（游戏换密钥时用）
   --dry-run          只统计，不写任何文件

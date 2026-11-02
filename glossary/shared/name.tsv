@@ -1,0 +1,5 @@
+# mode: exact
+# 共享角色名表（入库，可 PR）：个人偏好的词条写 glossary/local/name.tsv（不入库），不要放这里
+# 一些显式修正
+白子＊TERROR	白子＊恐怖
+星野＊TERROR	星野＊恐怖
