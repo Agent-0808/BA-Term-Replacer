@@ -48,30 +48,32 @@ def _escape(text: str) -> str:
 
 
 def export_table(con, table: str, out_path: Path, *, kana: bool, ascii_on: bool) -> int:
-    """导出一张表，返回写出的字段数。"""
+    """导出一张表，返回写出的字段数；没有可导字段时不创建文件。"""
     keycol = _key_column(con, table)
     key_expr = f"[{keycol}]" if keycol else "''"
     key_header = keycol or "key"
     rows = con.execute(f"SELECT rowid, {key_expr}, Bytes FROM [{table}]").fetchall()
-    written = 0
+    lines: list[str] = []
+    for rowid, key, blob in rows:
+        if not isinstance(blob, (bytes, bytearray)) or len(blob) < 16:
+            continue
+        try:
+            fields = list(iter_string_fields(bytes(blob), allow_ascii=ascii_on))
+        except ValueError:
+            continue
+        for slot, _fpos, _spos, text in fields:
+            if has_kana(text):
+                if not kana:
+                    continue
+            elif not has_cjk(text) and not ascii_on:
+                continue
+            lines.append(f"{rowid}\t{key}\t{slot}\t{_escape(text)}\n")
+    if not lines:
+        return 0
     with out_path.open("w", encoding="utf-8-sig", newline="\n") as f:
         f.write(f"rowid\t{key_header}\tslot\ttext\n")
-        for rowid, key, blob in rows:
-            if not isinstance(blob, (bytes, bytearray)) or len(blob) < 16:
-                continue
-            try:
-                fields = list(iter_string_fields(bytes(blob), allow_ascii=ascii_on))
-            except ValueError:
-                continue
-            for slot, _fpos, _spos, text in fields:
-                if has_kana(text):
-                    if not kana:
-                        continue
-                elif not has_cjk(text) and not ascii_on:
-                    continue
-                f.write(f"{rowid}\t{key}\t{slot}\t{_escape(text)}\n")
-                written += 1
-    return written
+        f.writelines(lines)
+    return len(lines)
 
 
 def handle_export(args: ExportTap) -> int:
@@ -82,15 +84,18 @@ def handle_export(args: ExportTap) -> int:
         return 1
     args.out.mkdir(parents=True, exist_ok=True)
     con = batr_db.connect(str(db), DEFAULT_KEY)
-    total_tables = total_fields = 0
+    total_tables = total_fields = skipped = 0
     try:
         for table in batr_db.select_tables(con, args.tables):
             n = export_table(con, table, args.out / f"{table}.tsv",
                              kana=args.kana, ascii_on=args.ascii)
-            total_tables += 1
-            total_fields += n
-            print(f"  {table}: {n}")
+            if n:
+                total_tables += 1
+                total_fields += n
+                print(f"  {table}: {n}")
+            else:
+                skipped += 1  # 无可导字段的空表不落盘
     finally:
         con.close()
-    print(f"=== {total_tables} 张表，{total_fields} 个字段 → {args.out}/ ===")
+    print(f"=== {total_tables} 张表，{total_fields} 个字段（跳过 {skipped} 张空表）→ {args.out}/ ===")
     return 0
