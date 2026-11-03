@@ -125,7 +125,7 @@ def patch_database(
             return
         rows: list[str] = []
         for (old, mode), count in glossary.hits.items():
-            new = glossary.exact_map.get(old) if mode == "exact" else glossary.sub_map.get(old, "")
+            new = glossary.replacement(old, mode)
             src = glossary.sources.get((old, mode)) or "-"
             rows.append(f"{old}\t{new}\t{mode}\t{src}\t{count}")
             log(f"  glossary[{old} -> {new}] mode={mode} hits={count}")

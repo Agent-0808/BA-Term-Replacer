@@ -14,13 +14,13 @@
     只命中「角色名(皮肤)」复合串，不误伤正文里的裸词（如單車）。
   t2s 转换后已相等、空的键跳过；纯 ASCII 键保留（游戏里有 Kei / Ain 这类拉丁名）。
 * 手写词表：glossary/shared/*.tsv（客观共识，入库可 PR）与 glossary/local/*.tsv
-  （个人偏好，不入库）全部扫描，匹配方式由注释行 `# mode: exact|sub` 声明
+  （个人偏好，不入库）全部扫描，匹配方式由注释行 `# mode: exact|sub|re` 声明
   （文件头为第一段缺省值，文件中间可切换、分块混用多种 mode）。
   加载顺序 auto -> shared -> local，后加载者优先（个人覆盖共享、手写覆盖自动），
   同键覆盖时报告；local/ 缺文件自动从 templates/ 复制（绝不覆盖已有内容）。
 * 黑名单（shared/blacklist.txt 客观 + local/blacklist.txt 个人，合并）：
   编译期对一切来源（自动 + 手写）过滤；可选第二列限定匹配方式
-  （exact / sub），不写则两种都禁用。想禁用某个自动键写黑名单，不要靠删行 ——
+  （exact / sub / re），不写则全部禁用。想禁用某个自动键写黑名单，不要靠删行 ——
   auto 条目不落盘，每次编译都从数据源重新生成。
 * 产物 compiled.tsv（gitignore）：四列 旧词/新词/mode/source，patch 的唯一输入；
   文件头记录 profile、生成时间与来源统计。
@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import urllib.request
 from datetime import datetime
@@ -103,14 +104,14 @@ def ensure_local_files() -> None:
         print(f"已从模板生成: {dest}")
 
 
-def load_blacklist() -> tuple[set[str], set[str]]:
-    """合并 shared 与 local 的黑名单（不存在则跳过），返回 (exact 禁用键, sub 禁用键)。
+def load_blacklist() -> tuple[set[str], set[str], set[str]]:
+    """合并 shared 与 local 的黑名单（不存在则跳过），返回 (exact 禁用键, sub 禁用键, re 禁用键)。
 
-    格式：一行一个繁体键；可选第二列限定匹配方式（exact / sub），不写则两种都禁用。
-    例：`希望<TAB>sub` = 整字段匹配照常、但正文子串替换禁用（避免误伤普通词）。
+    格式：一行一个繁体键；可选第二列限定匹配方式（exact / sub / re），不写则全部禁用。
+    例：`希望<TAB>sub` = 整字段匹配照常、但正文子串替换禁用（避免误伤普通词）；
+    re 规则的键就是它的 pattern 字符串（须与词表里写的完全一致）。
     """
-    exact: set[str] = set()
-    sub: set[str] = set()
+    buckets: dict[str, set[str]] = {"exact": set(), "sub": set(), "re": set()}
     for directory in (GLOSSARY_SHARED, GLOSSARY_LOCAL):
         path = Path(directory) / "blacklist.txt"
         if not path.exists():
@@ -124,16 +125,16 @@ def load_blacklist() -> tuple[set[str], set[str]]:
                 key, scope = key.strip(), scope.strip().lower()
                 if not key:
                     continue
-                if scope in ("exact", "sub"):
-                    (exact if scope == "exact" else sub).add(key)
+                if scope in buckets:
+                    buckets[scope].add(key)
                 elif scope:
-                    print(f"[blacklist] {path}:{ln} 未知范围 {scope!r}（应为 exact / sub），按两种都禁用处理")
-                    exact.add(key)
-                    sub.add(key)
+                    print(f"[blacklist] {path}:{ln} 未知范围 {scope!r}（应为 {' / '.join(buckets)}），按全部禁用处理")
+                    for bucket in buckets.values():
+                        bucket.add(key)
                 else:
-                    exact.add(key)
-                    sub.add(key)
-    return exact, sub
+                    for bucket in buckets.values():
+                        bucket.add(key)
+    return buckets["exact"], buckets["sub"], buckets["re"]
 
 
 def add_entry(
@@ -222,15 +223,29 @@ def hand_files(directory: str) -> list[Path]:
     return sorted(Path(directory).glob("*.tsv"))
 
 
+def valid_re(entries: dict[str, str], path: str) -> dict[str, str]:
+    """编译期校验 re 块的 pattern；非法正则报错并剔除，不进产物。"""
+    ok: dict[str, str] = {}
+    for old, new in entries.items():
+        try:
+            re.compile(old)
+        except re.error as e:
+            print(f"[glossary] {path} 非法正则 {old!r}（{e}），跳过")
+            continue
+        ok[old] = new
+    return ok
+
+
 def compile_glossary(
     students: list[dict],
     skin_map: dict[str, dict],
     profile: str,
 ) -> int:
     """编译：auto（仅 t2s）+ shared/*.tsv + local/*.tsv，后者优先；黑名单过滤后写产物。"""
-    black_exact, black_sub = load_blacklist()
+    black_exact, black_sub, black_re = load_blacklist()
     exact: dict[str, str] = {}
     sub: dict[str, str] = {}
+    regex: dict[str, str] = {}  # pattern -> 替换串（dict 保持插入序，规则序即应用序）
     src: dict[str, str] = {}  # 旧词 -> 来源（用于 compiled.tsv 的 source 列）
     sources: list[str] = []
 
@@ -249,7 +264,9 @@ def compile_glossary(
                 sources.append(f"{path}(0条)")
                 continue
             for mode, entries in groups.items():  # 单文件可分块混用多种 mode，逐桶归位
-                target = exact if mode == "exact" else sub
+                if mode == "re":
+                    entries = valid_re(entries, str(path))  # 编译期校验 pattern，坏正则不进产物
+                target = regex if mode == "re" else (exact if mode == "exact" else sub)
                 overridden = [k for k in entries if k in target]
                 target.update(entries)
                 src.update({k: str(path) for k in entries})
@@ -264,12 +281,16 @@ def compile_glossary(
     # 黑名单过滤：对一切来源（自动 + 手写）生效
     removed_exact = sorted(set(exact) & black_exact)
     removed_sub = sorted(set(sub) & black_sub)
+    removed_regex = sorted(set(regex) & black_re)
     exact = {k: v for k, v in exact.items() if k not in black_exact}
     sub = {k: v for k, v in sub.items() if k not in black_sub}
-    src = {k: s for k, s in src.items() if k in exact or k in sub}  # 同键可 exact 保留而 sub 被禁
-    if removed_exact or removed_sub:
-        print(f"黑名单过滤: exact 移除 {len(removed_exact)} 条，sub 移除 {len(removed_sub)} 条")
-        for key in (removed_exact + removed_sub)[:5]:
+    regex = {k: v for k, v in regex.items() if k not in black_re}
+    src = {k: s for k, s in src.items() if k in exact or k in sub or k in regex}  # 同键可部分保留
+    removed = removed_exact + removed_sub + removed_regex
+    if removed:
+        print(f"黑名单过滤: exact 移除 {len(removed_exact)} 条，sub 移除 {len(removed_sub)} 条"
+              + (f"，re 移除 {len(removed_regex)} 条" if removed_regex else ""))
+        for key in removed[:5]:
             print(f"    {key}")
 
     # 写 compiled.tsv（四列：旧词/新词/mode/source，gitignore，patch 的唯一输入）
@@ -283,7 +304,12 @@ def compile_glossary(
             f.write(f"{old}\t{new}\texact\t{src[old]}\n")
         for old, new in sub.items():
             f.write(f"{old}\t{new}\tsub\t{src[old]}\n")
-    print(f"输出: {out} （exact {len(exact)} 条 / sub {len(sub)} 条）")
+        for old, new in regex.items():
+            f.write(f"{old}\t{new}\tre\t{src[old]}\n")
+    stats = f"exact {len(exact)} 条 / sub {len(sub)} 条"
+    if regex:
+        stats += f" / re {len(regex)} 条"
+    print(f"输出: {out} （{stats}）")
     return 0
 
 
@@ -367,7 +393,7 @@ def write_identity_rows(path: Path, mode: str, keys: list[str], existing: set[st
 
 def update_template(students: list[dict], skin_map: dict[str, dict]) -> None:
     """往 local/ 补恒等行脚手架：name.tsv 名段/全名/皮肤名 + text.tsv 皮肤括号行。"""
-    black_exact, black_sub = load_blacklist()
+    black_exact, black_sub, _ = load_blacklist()
     name_keys = [k for k in collect_name_keys(students, skin_map, black_exact) if k not in black_exact]
     # text.tsv 只补皮肤括号恒等行：t2t 下 auto 不编入，皮肤 text 键没有脚手架用户很难自己发现格式
     text_keys = [

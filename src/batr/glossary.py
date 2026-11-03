@@ -12,14 +12,17 @@
 * patch 端只读编译产物 compiled.tsv（四列：旧词/新词/mode/source），零合并逻辑。
 * 模式语义：exact = 整字段相等才替换（只命中角色名字段，旬/希望 这类歧义短词也安全）；
   sub = 子串替换（单趟、最长键优先，与 `convert.py` 的匹配策略一致，避免 A->B 的
-  结果再被 B->C 命中）；同名键 exact 优先。
+  结果再被 B->C 命中）；re = 正则规则（Python re 语法，捕获组可用 \\1 反向引用），
+  在 sub 之后、OpenCC 之前逐条应用，规则序即文件序，适合带上下文条件的修正
+  （如 `學生會(?!變|陷)`）与「替换并追加」类改写；同名键 exact 优先。
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
-MODES = ("exact", "sub")
+MODES = ("exact", "sub", "re")
 DEFAULT_MODE = "sub"
 
 
@@ -75,9 +78,10 @@ def load_entries(path: str) -> dict[str, dict[str, str]]:
 
 @dataclass
 class Glossary:
-    """双词表 + 逐规则命中计数（审计用）。"""
+    """双词表 + 正则规则 + 逐规则命中计数（审计用）。"""
     exact_map: dict[str, str] = field(default_factory=dict)  # exact：旧词 -> 新词
     sub_map: dict[str, str] = field(default_factory=dict)    # sub：旧词 -> 新词
+    re_rules: list[tuple[re.Pattern[str], str]] = field(default_factory=list)  # re：(编译后 pattern, 替换串)
     hits: dict[tuple[str, str], int] = field(default_factory=dict)   # (旧词, mode) -> 命中次数
     sources: dict[tuple[str, str], str] = field(default_factory=dict)  # (旧词, mode) -> 来源（compiled.tsv 第 4 列）
     sub_maxlen: int = 0                                      # sub 键最大长度（匹配上界）
@@ -102,24 +106,35 @@ class Glossary:
                 if mode not in MODES:
                     print(f"[glossary] {path}:{ln} 未知 mode {mode!r}，跳过")
                     continue
-                target = g.exact_map if mode == "exact" else g.sub_map
-                if old in target:  # 同一 mode 内先出现者优先；同名键允许跨表（exact/sub 各司其职）
-                    print(f"[glossary] {path}:{ln} 重复键 {old!r}，保留先出现的")
-                    continue
-                target[old] = new
-                if mode == "sub":
-                    g.sub_maxlen = max(g.sub_maxlen, len(old))
+                if mode == "re":
+                    try:
+                        pattern = re.compile(old)
+                    except re.error as e:  # 产物本应经过编译期校验，此处兜底
+                        print(f"[glossary] {path}:{ln} 非法正则 {old!r}（{e}），跳过")
+                        continue
+                    if any(p.pattern == old for p, _ in g.re_rules):
+                        print(f"[glossary] {path}:{ln} 重复键 {old!r}，保留先出现的")
+                        continue
+                    g.re_rules.append((pattern, new))
+                else:
+                    target = g.exact_map if mode == "exact" else g.sub_map
+                    if old in target:  # 同一 mode 内先出现者优先；同名键允许跨表（exact/sub 各司其职）
+                        print(f"[glossary] {path}:{ln} 重复键 {old!r}，保留先出现的")
+                        continue
+                    target[old] = new
+                    if mode == "sub":
+                        g.sub_maxlen = max(g.sub_maxlen, len(old))
                 g.hits.setdefault((old, mode), 0)
                 g.sources[(old, mode)] = src
         return g
 
     def apply(self, text: str) -> str:
-        """先 exact（整字段相等），后 sub（单趟、最长键优先），并累计命中数。"""
+        """先 exact（整字段相等），后 sub（单趟、最长键优先），再 re（逐条 subn），并累计命中数。"""
         new = self.exact_map.get(text)
         if new is not None:
             self.hits[(text, "exact")] += 1
             return new
-        if not self.sub_map:
+        if not self.sub_map and not self.re_rules:
             return text
         out: list[str] = []
         i, n = 0, len(text)
@@ -135,7 +150,20 @@ class Glossary:
             else:
                 out.append(text[i])
                 i += 1
-        return "".join(out)
+        new = "".join(out)
+        for pattern, repl in self.re_rules:  # sub 之后的上下文修正层：普通词表优先，re 兜底
+            new, cnt = pattern.subn(repl, new)
+            if cnt:
+                self.hits[(pattern.pattern, "re")] += cnt
+        return new
+
+    def replacement(self, old: str, mode: str) -> str:
+        """按 (旧词, mode) 反查替换值（命中日志用）；re 桶的旧词即 pattern 字符串。"""
+        if mode == "exact":
+            return self.exact_map.get(old, "")
+        if mode == "re":
+            return next((repl for pattern, repl in self.re_rules if pattern.pattern == old), "")
+        return self.sub_map.get(old, "")
 
     def apply_exact(self, text: str) -> str | None:
         """只做 exact 整字段匹配，不返回原文（无命中为 None）。

@@ -4,6 +4,8 @@
 用法（db 省略时自动定位游戏客户端内的库）：
     uv run batr scan <关键词...> [--db <db>] [--tables 正则] [--ascii] [--kana] [--limit N]
     uv run batr scan <关键词...> --diff <另一个db>   # 两库命中数对比（验证替换效果）
+    uv run batr scan <关键词...> --regex             # 关键词按 Python 正则解释（默认字面量，
+                                                     # 如 `學生會(?!變|陷)`；元字符无需转义）
     uv run batr scan --uncovered                    # 未匹配默认表正则但含中文字段的表
 
 字段按三类统计：kana（含假名，日文死数据，默认只计数，--kana 开启后也出样本）/ cjk（中文字段）/
@@ -26,6 +28,7 @@ from .base import BaseTap
 
 CLASSES = ("kana", "cjk", "ascii")
 Counter = dict[str, int]  # 类 -> 计数
+Keyword = tuple[str, "re.Pattern | None"]  # (展示用关键词, 编译后 pattern；None = 字面量)
 
 
 class ScanTap(BaseTap):
@@ -40,10 +43,25 @@ class ScanTap(BaseTap):
     limit: int = 30 # 每表每关键词的样本条数
     diff: Path | None = None  # 再扫另一个库，输出两库命中数对比（验证替换效果）
     uncovered: bool = False  # 列出未匹配默认表正则但含中文字段的表
+    regex: bool = False  # 关键词按 Python 正则解释（默认字面量，避免元字符改变语义）
+
+
+def compile_keywords(keywords: list[str], regex_on: bool) -> list[Keyword] | None:
+    """--regex 时编译关键词；非法正则报错返回 None（由调用方决定退出码）。"""
+    if not regex_on:
+        return [(kw, None) for kw in keywords]
+    kws: list[Keyword] = []
+    for kw in keywords:
+        try:
+            kws.append((kw, re.compile(kw)))
+        except re.error as e:
+            print(f"非法正则 {kw!r}（{e}）")
+            return None
+    return kws
 
 
 def scan_db(
-    path: str, keywords: list[str], *, tables_re: re.Pattern | None, ascii_on: bool,
+    path: str, kws: list[Keyword], *, tables_re: re.Pattern | None, ascii_on: bool,
     limit: int, kana_on: bool = False
 ) -> tuple[dict[str, dict[str, Counter]], dict[str, dict[str, list[str]]]]:
     """扫一个库：返回（表 -> 关键词 -> 各类计数, 表 -> 关键词 -> 样本文本）。"""
@@ -74,8 +92,8 @@ def scan_db(
                         cls = "ascii"
                     else:
                         continue
-                    for kw in keywords:
-                        if kw not in text:
+                    for kw, pat in kws:
+                        if not (pat.search(text) if pat is not None else kw in text):
                             continue
                         c = counts[table][kw]
                         c[cls] = c.get(cls, 0) + 1
@@ -92,10 +110,10 @@ def total(c: Counter) -> int:
     return sum(c.values())
 
 
-def print_scan(path: str, keywords: list[str], counts: dict, samples: dict) -> None:
+def print_scan(path: str, kws: list[Keyword], counts: dict, samples: dict) -> None:
     print(f"=== {path} ===")
     for table in sorted(counts):
-        for kw in keywords:
+        for kw, _pat in kws:
             if kw not in counts[table]:
                 continue
             c = counts[table][kw]
@@ -104,12 +122,12 @@ def print_scan(path: str, keywords: list[str], counts: dict, samples: dict) -> N
                 print(f"  {s[:100]!r}")
 
 
-def print_diff(db_a: str, db_b: str, keywords: list[str], counts_a: dict, counts_b: dict) -> None:
+def print_diff(db_a: str, db_b: str, kws: list[Keyword], counts_a: dict, counts_b: dict) -> None:
     # 相对路径显示，避免两库同名（output/ExcelDB.db vs work/db/ExcelDB.db）分不清
     name_a, name_b = os.path.relpath(db_a), os.path.relpath(db_b)
-    for kw in keywords:
-        tables = sorted({t for t, kws in counts_a.items() if kw in kws}
-                        | {t for t, kws in counts_b.items() if kw in kws})
+    for kw, _pat in kws:
+        tables = sorted({t for t, kwc in counts_a.items() if kw in kwc}
+                        | {t for t, kwc in counts_b.items() if kw in kwc})
         if not tables:
             print(f"--- {kw}: 两库均无命中 ---")
             continue
@@ -165,15 +183,18 @@ def handle_scan(args: ScanTap) -> int:
     if not keywords:
         print("至少给一个关键词（或使用 --uncovered）")
         return 2
+    kws = compile_keywords(keywords, args.regex)
+    if kws is None:
+        return 2
     tables_re = re.compile(args.tables, re.IGNORECASE) if args.tables else None
     if args.diff:
-        counts_a, _ = scan_db(str(db), keywords, tables_re=tables_re,
+        counts_a, _ = scan_db(str(db), kws, tables_re=tables_re,
                               ascii_on=args.ascii, limit=0)
-        counts_b, _ = scan_db(str(args.diff), keywords, tables_re=tables_re,
+        counts_b, _ = scan_db(str(args.diff), kws, tables_re=tables_re,
                               ascii_on=args.ascii, limit=0)
-        print_diff(str(db), str(args.diff), keywords, counts_a, counts_b)
+        print_diff(str(db), str(args.diff), kws, counts_a, counts_b)
         return 0
-    counts, samples = scan_db(str(db), keywords, tables_re=tables_re,
+    counts, samples = scan_db(str(db), kws, tables_re=tables_re,
                               ascii_on=args.ascii, limit=args.limit, kana_on=args.kana)
-    print_scan(str(db), keywords, counts, samples)
+    print_scan(str(db), kws, counts, samples)
     return 0

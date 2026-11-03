@@ -109,6 +109,53 @@ def test_compiled_duplicate_key_first_wins() -> None:
     assert g.exact_map["彩奈"] == "阿罗娜"
 
 
+def test_re_lookahead_and_backreference() -> None:
+    g = _compiled([
+        "學生會(?!變|陷|在|要|被|有)\t学生会\tre\tx",
+        "氣墊船\\(([^)]*)\\)\t若藻船(\\1)後記\tre\tx",
+    ])
+    # 负向断言拦截：後接指定字时不替换
+    assert g.apply("學生會變更") == "學生會變更"
+    # 其余上下文正常替换
+    assert g.apply("學生會室") == "学生会室"
+    # 捕获组 + \\1 反向引用：保留括号内容并追加
+    assert g.apply("氣墊船(浪漫奔跑)") == "若藻船(浪漫奔跑)後記"
+    assert g.hits[("學生會(?!變|陷|在|要|被|有)", "re")] == 1
+
+
+def test_re_runs_after_sub() -> None:
+    # 次序：exact -> sub -> re；sub 的替换结果可以被 re 规则继续修正
+    g = _compiled(["犬\t猫\tsub\tx", "猫(?!狗)\t狗\tre\tx"])
+    assert g.apply("犬") == "狗"
+    assert g.apply("猫狗") == "猫狗"  # re 负向断言拦截，未被 sub 触碰的原文保持
+
+
+def test_re_replacement_lookup_and_bad_pattern() -> None:
+    g = _compiled(["氣墊船\t若藻船\tre\tx", "([坏正则\tX\tre\tx", "彌香\t未花\texact\tx"])
+    assert g.replacement("氣墊船", "re") == "若藻船"
+    assert g.replacement("彌香", "exact") == "未花"
+    assert g.replacement("不存在", "sub") == ""
+    assert len(g.re_rules) == 1  # 坏正则被跳过，不影响其他规则加载（exact 仍可用）
+    assert g.exact_map == {"彌香": "未花"}
+
+
+def test_load_blacklist_re_scope(tmp_path, monkeypatch) -> None:
+    from batr.commands import glossary as cmd
+
+    (tmp_path / "blacklist.txt").write_text("希望\tsub\n氣墊船\\(\tre\n全禁\n", encoding="utf-8-sig")
+    monkeypatch.setattr(cmd, "GLOSSARY_SHARED", str(tmp_path))
+    monkeypatch.setattr(cmd, "GLOSSARY_LOCAL", str(tmp_path / "不存在"))
+    exact, sub, regex = cmd.load_blacklist()
+    assert (exact, sub, regex) == ({"全禁"}, {"希望", "全禁"}, {"氣墊船\\(", "全禁"})
+
+
+def test_valid_re_rejects_bad_pattern() -> None:
+    from batr.commands.glossary import valid_re
+
+    ok = valid_re({"學生會(?!變)": "学生会", "([坏": "X"}, "dummy")
+    assert ok == {"學生會(?!變)": "学生会"}
+
+
 def test_write_identity_rows_appends_with_mode_header(tmp_path: Path) -> None:
     from batr.commands.glossary import write_identity_rows
 
