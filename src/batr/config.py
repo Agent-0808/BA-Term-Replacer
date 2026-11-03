@@ -14,7 +14,8 @@ CONVERT_MODES = ("tw2sp", "t2s", "none")
 
 # 译名词表目录（三镜像布局：shared/ 客观共识入库可 PR，local/ 个人偏好不入库，
 # templates/ 空模板格式的事实来源）。文件名不承载语义，匹配方式（exact/sub）由
-# 各文件头 "# mode:" 声明；patch 只读编译产物 compiled.tsv，不再自己拼路径。
+# 注释行 "# mode:" 声明（文件头为第一段缺省值，文件中间可切换、分块混用多种 mode）；
+# patch 只读编译产物 compiled.tsv，不再自己拼路径。
 GLOSSARY_DIR = "glossary"
 GLOSSARY_SHARED = f"{GLOSSARY_DIR}/shared"
 GLOSSARY_LOCAL = f"{GLOSSARY_DIR}/local"

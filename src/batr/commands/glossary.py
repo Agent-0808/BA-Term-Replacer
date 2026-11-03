@@ -14,7 +14,8 @@
     只命中「角色名(皮肤)」复合串，不误伤正文里的裸词（如單車）。
   t2s 转换后已相等、空的键跳过；纯 ASCII 键保留（游戏里有 Kei / Ain 这类拉丁名）。
 * 手写词表：glossary/shared/*.tsv（客观共识，入库可 PR）与 glossary/local/*.tsv
-  （个人偏好，不入库）全部扫描，匹配方式由各文件头 `# mode: exact|sub` 声明。
+  （个人偏好，不入库）全部扫描，匹配方式由注释行 `# mode: exact|sub` 声明
+  （文件头为第一段缺省值，文件中间可切换、分块混用多种 mode）。
   加载顺序 auto -> shared -> local，后加载者优先（个人覆盖共享、手写覆盖自动），
   同键覆盖时报告；local/ 缺文件自动从 templates/ 复制（绝不覆盖已有内容）。
 * 黑名单（shared/blacklist.txt 客观 + local/blacklist.txt 个人，合并）：
@@ -50,7 +51,7 @@ from ..config import (
     GLOSSARY_TEMPLATES,
 )
 from ..convert import Converter
-from ..glossary import load_entries, parse_mode
+from ..glossary import DEFAULT_MODE, MODES, iter_rows, load_entries
 from .base import BaseTap
 
 URL = "https://agent-0808.github.io/BA-characters-internal-id/data/students.json"
@@ -243,20 +244,22 @@ def compile_glossary(
 
     for directory in (GLOSSARY_SHARED, GLOSSARY_LOCAL):  # 后加载者优先：local 覆盖 shared
         for path in hand_files(directory):
-            mode = parse_mode(str(path))
-            entries = load_entries(str(path), mode)
-            if not entries:
-                sources.append(f"{path}({mode}, 0条)")
+            groups = load_entries(str(path))
+            if not groups:
+                sources.append(f"{path}(0条)")
                 continue
-            target = exact if mode == "exact" else sub
-            overridden = [k for k in entries if k in target]
-            target.update(entries)
-            src.update({k: str(path) for k in entries})
-            sources.append(f"{path}({mode}, {len(entries)}条)")
-            if overridden:
-                print(f"[glossary] {path} 覆盖了先加载的 {len(overridden)} 个键（后加载者优先），示例前 5:")
-                for key in overridden[:5]:
-                    print(f"    {key} -> {entries[key]}")
+            for mode, entries in groups.items():  # 单文件可分块混用多种 mode，逐桶归位
+                target = exact if mode == "exact" else sub
+                overridden = [k for k in entries if k in target]
+                target.update(entries)
+                src.update({k: str(path) for k in entries})
+                if overridden:
+                    print(f"[glossary] {path} 覆盖了先加载的 {len(overridden)} 个 {mode} 键（后加载者优先），示例前 5:")
+                    for key in overridden[:5]:
+                        print(f"    {key} -> {entries[key]}")
+            # 单 mode 与旧格式一致 `路径(exact, N条)`，多 mode 逐块展开
+            desc = ", ".join(f"{m}, {len(entries)}条" for m, entries in groups.items())
+            sources.append(f"{path}({desc})")
 
     # 黑名单过滤：对一切来源（自动 + 手写）生效
     removed_exact = sorted(set(exact) & black_exact)
@@ -305,51 +308,59 @@ def collect_name_keys(students: list[dict], skin_map: dict[str, dict], black_exa
 
 
 def handwritten_keys(mode: str) -> set[str]:
-    """shared/ 与 local/ 中该 mode 已存在的键（含恒等行）：完整词条无需再补脚手架。"""
+    """shared/ 与 local/ 中该 mode 块下已存在的键（含恒等行）：完整词条无需再补脚手架。"""
     keys: set[str] = set()
     for directory in (GLOSSARY_SHARED, GLOSSARY_LOCAL):
         for path in hand_files(directory):
-            if parse_mode(str(path)) != mode:
-                continue
-            with open(path, encoding="utf-8-sig") as f:
-                for raw in f:
-                    line = raw.rstrip("\r\n")
-                    if not line.strip() or line.lstrip().startswith("#") or "\t" not in line:
-                        continue
+            for cursor, _, line in iter_rows(str(path)):
+                if cursor == mode and "\t" in line:
                     key = line.split("\t")[0].strip()
                     if key:
                         keys.add(key)
     return keys
 
 
-def write_identity_rows(path: Path, keys: list[str], existing: set[str]) -> None:
-    """恒等行脚手架：已有内容逐行保留，只补新增键；未填写的（恒等）行若已不在生成集合里则删除。"""
+def write_identity_rows(path: Path, mode: str, keys: list[str], existing: set[str]) -> None:
+    """恒等行脚手架：已有内容逐行保留，只补新增键；本 mode 下未填写的（恒等）行
+    若已不在生成集合里则删除。追加行前确保文件末尾处于本 mode（必要时补 `# mode:` 头）。"""
     with open(path, encoding="utf-8-sig", newline="") as f:
         lines = [ln.rstrip("\r\n") for ln in f]
     valid = set(keys)
     kept: list[str] = []
     present: set[str] = set()
     pruned = 0
+    cursor = DEFAULT_MODE
     for line in lines:
-        if "\t" not in line or line.lstrip().startswith("#"):
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            if stripped.startswith("# mode:"):
+                declared = stripped.removeprefix("# mode:").strip().lower()
+                if declared in MODES:
+                    cursor = declared
+            kept.append(line)
+            continue
+        if "\t" not in line:
             kept.append(line)
             continue
         key, value = line.split("\t")[:2]
         key = key.strip()
-        if key and key not in valid and key == value:
-            pruned += 1  # 未填写的恒等行 + 键已不在生成集合（黑名单等）-> 删除，避免模板里留陈旧条目
+        if cursor == mode and key and key not in valid and key == value:
+            pruned += 1  # 本 mode 未填写的恒等行 + 键已不在生成集合（黑名单等）-> 删除，避免模板里留陈旧条目
             continue
+        if cursor == mode and key:
+            present.add(key)
         kept.append(line)
-        if key:
-            present.add(key)
     added = 0
-    for key in keys:
-        if key not in present and key not in existing:
-            kept.append(f"{key}\t{key}")
-            present.add(key)
-            added += 1
+    tail: list[str] = []
+    new_keys = [k for k in keys if k not in present and k not in existing]
+    if new_keys:
+        if cursor != mode:  # 文件末尾停在别的 mode 块，补声明头防止追加行落错桶
+            tail.append(f"# mode: {mode}")
+        tail.extend(f"{key}\t{key}" for key in new_keys)
+        added = len(new_keys)
+        present.update(new_keys)
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        for line in kept:
+        for line in kept + tail:
             f.write(f"{line}\n")
     print(f"输出: {path} （共 {len(present)} 条，新增 {added} 条，清理陈旧恒等行 {pruned} 条）")
 
@@ -365,8 +376,8 @@ def update_template(students: list[dict], skin_map: dict[str, dict]) -> None:
         if (loc.get("tw") or "").strip()
     ]
     text_keys = [k for k in dict.fromkeys(text_keys) if k not in black_sub]
-    write_identity_rows(Path(GLOSSARY_LOCAL) / "name.tsv", name_keys, handwritten_keys("exact"))
-    write_identity_rows(Path(GLOSSARY_LOCAL) / "text.tsv", text_keys, handwritten_keys("sub"))
+    write_identity_rows(Path(GLOSSARY_LOCAL) / "name.tsv", "exact", name_keys, handwritten_keys("exact"))
+    write_identity_rows(Path(GLOSSARY_LOCAL) / "text.tsv", "sub", text_keys, handwritten_keys("sub"))
 
 
 def handle_glossary(args: GlossaryTap) -> int:
