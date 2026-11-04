@@ -39,6 +39,8 @@ PC 端支持自动定位 Steam 客户端的 `ExcelDB.db` 文件，`uv run batr p
 
 差别只在词表来源和 `--convert` 参数，命令骨架相同。
 
+命令参数与排查路径详解见 [docs/脚本用法说明.md](docs/脚本用法说明.md)；词表文件语法与运作机制见 [docs/词表系统.md](docs/词表系统.md)。
+
 ### 1. 获取词表
 
 词表是编译式的：`batr glossary` 把 auto 条目（KivoWiki 民译）+ 手写词表（`glossary/shared/` 共享、`glossary/local/` 个人）经黑名单过滤后编译成唯一产物 `glossary/compiled.tsv`，patch 只读它：
@@ -48,9 +50,6 @@ uv run batr glossary             # 繁→简用（默认）：auto 条目 + 手�
 uv run batr glossary --profile t2t  # 繁→繁用：auto 不编入，只编手写词表
 uv run batr glossary --template  # 往 glossary/local/ 补恒等行脚手架（繁→繁民译用），不编译
 ```
-
-- auto 条目自动拉取民译数据（缓存于 `work/BACII_students.json` 与 `work/BACII_skin_map.json`，`--refresh` 强制重新下载），不落盘、每次编译重新生成。
-- `--template` 往 `local/name.tsv` 追加名段/全名/皮肤名恒等行（如`彌香<TAB>彌香`），往 `local/text.tsv` 追加皮肤括号恒等行；把右列改成你要的繁体译名即生效，没改的行编译加载时自动跳过。
 
 ### 2. 修改词表
 
@@ -63,20 +62,19 @@ uv run batr glossary --template  # 往 glossary/local/ 补恒等行脚手架（�
 
 注意：
 
-- `local/` 缺文件时编译自动从 `templates/` 复制空模板（已存在的不动）；判断写哪边一句话：**这条词条换个玩家是否也该生效？** 该 → `shared/`，只是自己口味 → `local/`。
-- 匹配方式由各文件头 `# mode: exact|sub` 声明（缺省 sub），文件名不承载语义。
 - 分隔符是 **Tab** 不是空格；键必须是数据库里的繁体原文；值写译文（繁→繁写繁体；繁→简可以简体或繁体，还会通过 OpenCC 转成简体）。
-- 黑名单可加第二列限定匹配方式：`希望<TAB>sub` = 角色名整字段照常替换、正文子串替换跳过（避免误伤普通词），`键<TAB>exact` 反之；黑名单在编译期对一切来源生效。
-- 皮肤名带括号的键（`(單車) → (骑行服)`）只命中 `白子(單車)` 这类复合串，不会动正文里的「單車」。
+- 其余语法（`# mode:` 声明、歧义词处理、黑名单 scope、皮肤名括号键等）见 [docs/词表系统.md](docs/词表系统.md)。
 
 ### 3. 运行命令
 
 #### **繁→简**
-默认：tw2sp + 编译词表
+默认：tw2sp（繁中转简中） + 编译词表
 
 ```bash
-uv run batr patch --dry-run                                  # 预演：逐规则打印命中数，hits=0 多半是键写错
-uv run batr patch --out output/ExcelDB.cn.db --verify        # 正式产出（CRC32 与输入一致）
+uv run batr patch --dry-run     # 预演：逐规则打印命中数，hits=0 多半是键写错
+uv run batr patch               # 正式产出（CRC32 与输入一致）
+# 如果确认没问题，可以直接安装到游戏：
+uv run batr patch --install     # 生成后替换游戏原文件
 ```
 
 #### **繁→繁民译**
@@ -183,7 +181,7 @@ patch 常用参数（其余子命令见 -h）：
 │   └── data/                 OpenCC 词库（Apache-2.0）
 ├── scripts/legacy/           从旧项目继承，已弃用的脚本
 ├── glossary/                 词表（自动生成的本体不入库；blacklist/terms 入库共享）
-├── docs/                     原理、用法说明、字体问题
+├── docs/                     原理、用法说明、词表系统、字体问题
 └── tests/                    pytest（CRC 已知向量、转换样例、端到端）
 ```
 
