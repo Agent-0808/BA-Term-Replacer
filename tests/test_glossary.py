@@ -161,7 +161,7 @@ def test_write_identity_rows_appends_with_mode_header(tmp_path: Path) -> None:
 
     path = tmp_path / "mixed.tsv"
     path.write_text("# mode: exact\n甲\t甲\n# mode: sub\n乙\t乙\n", encoding="utf-8")
-    # 向 exact 补脚手架：文件末尾停在 sub 块，追加前必须补 `# mode: exact` 头
+    # 向 exact 补模板：文件末尾停在 sub 块，追加前必须补 `# mode: exact` 头
     write_identity_rows(path, "exact", ["甲", "丙"], existing=set())
     assert path.read_text(encoding="utf-8") == "# mode: exact\n甲\t甲\n# mode: sub\n乙\t乙\n# mode: exact\n丙\t丙\n"
 
@@ -177,7 +177,7 @@ def test_write_identity_rows_prunes_stale_only_in_mode(tmp_path: Path) -> None:
 
     path = tmp_path / "mixed.tsv"
     path.write_text("# mode: exact\n旧名\t旧名\n# mode: sub\n旧词\t旧词\n", encoding="utf-8")
-    # 只对 exact 块做脚手架：exact 的陈旧恒等行被删，sub 块的「旧词」保留
+    # 只对 exact 块做模板：exact 的陈旧恒等行被删，sub 块的「旧词」保留
     write_identity_rows(path, "exact", ["新名"], existing=set())
     text = path.read_text(encoding="utf-8")
     assert "旧名" not in text

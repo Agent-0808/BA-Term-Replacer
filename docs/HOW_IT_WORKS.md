@@ -273,7 +273,7 @@ sub 是**单趟扫描、最长键优先、不级联**：输出一旦产生就不
   - **分隔符是 Tab 不是空格**，写错整行被跳过并告警）
   - `#` 开头是注释；整文件匹配方式由头部 `# mode: exact|sub` 声明
   - 键必须是数据库里的**繁体原文**——写错即零命中，可以用 `--dry-run` 的 `hits=0` 排查。
-  - t2s 流程（默认）值写简体或繁体都行（繁体会再过 OpenCC 转简体）；t2t 流程（`--profile t2t`，patch 端自动绑定 `--convert none`）值必须写繁体，用 `batr glossary --template` 在 `local/` 生成恒等行脚手架（右列与左列相同的行 = 未填写，加载时跳过）。
+  - t2s 流程（默认）值写简体或繁体都行（繁体会再过 OpenCC 转简体）；t2t 流程（`--profile t2t`，patch 端自动绑定 `--convert none`）值必须写繁体，用 `batr glossary --template` 在 `local/` 生成恒等行模板（右列与左列相同的行 = 未填写，加载时跳过）。
 - 编译优先级见 §5.3：后加载者优先，local 覆盖 shared、手写覆盖 auto。
 - 禁用词条的粒度：黑名单第二列可限定匹配方式，如 `希望<TAB>sub` = 整字段匹配照常替换、正文子串替换跳过（避免误伤普通词"希望"），`键<TAB>exact` 反之，不写则两种都禁用；黑名单对自动与手写**一切来源**生效（`shared/blacklist.txt` 客观入库，`local/blacklist.txt` 个人）。
 - 产物 `glossary/compiled.tsv`（gitignore）是 patch 的唯一输入，注释头记录 profile、生成时间与来源统计；重跑 `batr glossary --profile ...` 即切换流程。

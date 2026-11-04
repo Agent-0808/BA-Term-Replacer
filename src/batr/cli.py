@@ -8,6 +8,7 @@ from typing import Callable
 from tap import Tap
 
 from . import __version__
+from .commands.backup import BackupTap, handle_backup
 from .commands.export import ExportTap, handle_export
 from .commands.glossary import GlossaryTap, handle_glossary
 from .commands.patch import PatchTap, handle_patch
@@ -32,6 +33,7 @@ class MainTap(Tap):
         self._underscores_to_dashes = True
         self.add_subparsers(dest="command", help="可用命令")
         self.add_subparser("patch", PatchTap, help="字段级文本补丁 + CRC 修正，--install 可覆盖安装到游戏目录")
+        self.add_subparser("backup", BackupTap, help="把未改动的库复制为本地干净副本（默认 work/db/ExcelDB.db）")
         self.add_subparser("scan", ScanTap, help="字段级扫描：关键词定位 / 两库对比 / 未覆盖表清单")
         self.add_subparser("export", ExportTap, help="把数据库文本导出成每表一个 TSV")
         self.add_subparser("glossary", GlossaryTap, help="词表编译：数据源 + 手写词表 + 黑名单 -> glossary/compiled.tsv（--template 生成恒等行模板）")
@@ -41,6 +43,7 @@ class MainTap(Tap):
 # --- 命令映射 ---
 COMMAND_HANDLERS: dict[str, Callable[..., int]] = {
     "patch": handle_patch,
+    "backup": handle_backup,
     "scan": handle_scan,
     "export": handle_export,
     "glossary": handle_glossary,

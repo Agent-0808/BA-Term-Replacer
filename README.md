@@ -11,7 +11,9 @@
 把国际服（Global / 繁中）客户端的界面与剧情文本本地化为简体中文；或套用自制的繁体民译词表，保持繁体。
 输入一个 `ExcelDB.db`，输出另一个可直接使用的 `ExcelDB.db`。
 
-> 仅适用于 **国际服繁中**。
+> 根据国际服的加载机制与中文语言的性质做了特化 
+>
+> 因此仅适用于 **国际服繁中**。
 
 | 改之前 | 改之后 |
 |---|---|
@@ -29,77 +31,110 @@ cd BA-Term-Replacer
 uv sync
 ```
 
-PC 端支持自动定位 Steam 客户端的 `ExcelDB.db` 文件，`uv run batr paths` 可查看检测结果；
-
 ## 详细使用教程
 
-两种主要用途：
-- **繁→简**（kivowiki 民译词表 + OpenCC 字形转换）
-- **繁→繁民译**（不转字形，纯词表，自己写译文）
+两种主要用途，各自是一条完整流程（备份 → 定制词表 → 编译 → 应用）：
 
-差别只在词表来源和 `--convert` 参数，命令骨架相同。
+- **流程 A：繁→简**    —— KivoWiki 民译词表自动获取 + OpenCC 繁体转简体，不改词表也能直接跑
+- **流程 B：繁→繁民译** —— 不转字形，auto 不编入，自己填译文
 
 命令参数与排查路径详解见 [docs/脚本用法说明.md](docs/脚本用法说明.md)；词表文件语法与运作机制见 [docs/词表系统.md](docs/词表系统.md)。
 
-### 1. 获取词表
+### 词表文件夹内容
 
-词表是编译式的：`batr glossary` 把 auto 条目（KivoWiki 民译）+ 手写词表（`glossary/shared/` 共享、`glossary/local/` 个人）经黑名单过滤后编译成唯一产物 `glossary/compiled.tsv`，patch 只读它：
-
-```bash
-uv run batr glossary             # 繁→简用（默认）：auto 条目 + 手写词表编入产物
-uv run batr glossary --profile t2t  # 繁→繁用：auto 不编入，只编手写词表
-uv run batr glossary --template  # 往 glossary/local/ 补恒等行脚手架（繁→繁民译用），不编译
-```
-
-### 2. 修改词表
+想改什么 → 写哪个文件（两条流程通用）：
 
 | 想要修改 | 修改文件 |
 |---|---|
-| 写自己的角色名译名（繁→繁） | `local/name.tsv`（改恒等行右列，`--template` 生成脚手架） |
+| 写自己的角色名译名（繁→繁） | `local/name.tsv`（改恒等行右列，`--template` 生成模板） |
 | 补充/修正译名（个人偏好） | `local/name.tsv` / `local/text.tsv`（不入库，后加载优先于 shared） |
 | 地名/组织/术语等通用共识 | `shared/text.tsv`（入库共享，可 PR） |
-| 禁用某个词条（自动或手写都行） | `local/blacklist.txt`（个人喜好）或 `shared/blacklist.txt`（入库共享） |
+| 禁用某个词条（自动或手写都行） | `local/blacklist.txt` |
 
-注意：
+格式：TSV 两列 `旧词<TAB>新词`，**分隔符是 Tab 不是空格**；键必须是数据库里的繁体原文；值写译文（繁→繁写繁体；繁→简可以简体或繁体，还会通过 OpenCC 转成简体）。
 
-- 分隔符是 **Tab** 不是空格；键必须是数据库里的繁体原文；值写译文（繁→繁写繁体；繁→简可以简体或繁体，还会通过 OpenCC 转成简体）。
-- 其余语法（`# mode:` 声明、歧义词处理、黑名单 scope、皮肤名括号键等）见 [docs/词表系统.md](docs/词表系统.md)。
+其余语法（`# mode:` 声明、歧义词处理、黑名单 scope、皮肤名括号键等）见 [docs/词表系统.md](docs/词表系统.md)。
 
-### 3. 运行命令
+### 流程 A：繁→简
 
-#### **繁→简**
-默认：tw2sp（繁中转简中） + 编译词表
+1. **备份文本数据库（推荐）**：
 
-```bash
-uv run batr patch --dry-run     # 预演：逐规则打印命中数，hits=0 多半是键写错
-uv run batr patch               # 正式产出（CRC32 与输入一致）
-# 如果确认没问题，可以直接安装到游戏：
-uv run batr patch --install     # 生成后替换游戏原文件
-```
-
-#### **繁→繁民译**
-先 `glossary --profile t2t` 编译（auto 不编入）+ `--template` 生成恒等行模板填好译文，然后 `--profile t2t` 会自动绑定 `--convert none`：
+先复制一份游戏目录里库的干净副本，防止修改后产生错误。之后所有命令都用备份的文件作为原数据：
 
 ```bash
-uv run batr glossary --profile t2t && uv run batr glossary --template
-uv run batr patch --profile t2t --dry-run
-uv run batr patch --profile t2t --out output/ExcelDB.tw.db
+uv run batr backup     # 复制为 work/db/ExcelDB.db（自动定位游戏库；已存在不覆盖，--force 重写）
 ```
 
-PC 端完成后 `uv run batr patch --install` 可直接覆盖安装到游戏目录（覆盖前自动备份原库为 `.bak`）；
-移动端把输出产物放回设备原路径。游戏内点了「资源修复 / 重新下载」才需要重跑。
+2. **（可选）添加自己的词条**：
+
+KivoWiki 获取的民译条目已覆盖角色名与皮肤名，不改也能直接用；想调整偏好再编辑 `glossary/local/` 里的文件。
+
+3. **编译词表**：
+
+```bash
+uv run batr glossary   # 默认 t2s：auto 条目 + 手写词表 → glossary/compiled.tsv
+```
+
+4. **应用到游戏**：
+
+```bash
+uv run batr patch --db work/db/ExcelDB.db --dry-run   # 预演：逐规则打印命中数，hits=0 多半是键写错
+uv run batr patch --db work/db/ExcelDB.db             # 正式产出
+# 确认没问题后覆盖安装到游戏目录（覆盖前自动备份原库为 .bak）：
+uv run batr patch --db work/db/ExcelDB.db --install
+```
+
+### 流程 B：繁→繁民译
+
+1. **备份文本数据库（推荐）**：
+
+同流程 A 第 1 步，`uv run batr backup`。
+
+2. **生成待填模板**：
+
+```bash
+uv run batr glossary --template   # 往 glossary/local/ 补恒等行模板，不编译（幂等，已有内容只补新键）
+```
+
+3. **填写模板**：进入 `glossary/local/`，把恒等行右列改成你喜欢的繁体译文；未填的行（右列 = 左列）编译时自动跳过。
+
+4. **编译词表**：
+
+```bash
+uv run batr glossary --profile t2t   # t2t 模式只编手写词表
+```
+
+5. **应用到游戏**
+
+（patch 端 `--profile t2t` 会自动绑定 `--convert none`，保持繁体）：
+
+```bash
+uv run batr patch --db work/db/ExcelDB.db --profile t2t --dry-run
+uv run batr patch --db work/db/ExcelDB.db --profile t2t --out output/ExcelDB.tw.db
+# 确认没问题后覆盖安装到游戏目录：
+uv run batr patch --db work/db/ExcelDB.db --profile t2t --install
+```
+
 替换没生效、译名不对时，用 `uv run batr scan` 做字段级排查，完整参数与排查路径见 [docs/脚本用法说明.md](docs/脚本用法说明.md)。
 
-### 命令一览
+## 命令一览
+
+> [!TIP]
+> 详细说明见 [脚本用法说明](./docs/脚本用法说明.md)
 
 ```
+# 查看所有命令
 uv run batr -h
 ```
 
+PC 端支持自动定位 Steam 客户端的 `ExcelDB.db` 文件，`uv run batr paths` 可查看检测结果
+
+大部分命令都支持 --db 参数，用于指定输入 `ExcelDB.db` 文件。当不输入时，自动根据注册表定位游戏的 `ExcelDB.db` 文件。
 
 ```
 batr <子命令>
   patch      字段级文本补丁（支持变长替换）+ CRC 追加修正，--install 覆盖安装到游戏目录
+  backup     把未改动的库复制为本地干净副本（默认 work/db/ExcelDB.db）
   scan       字段级扫描（调试）：关键词定位 / 两库对比 / 未覆盖表清单
   export     把目标表的文本字段导出成每表一个 TSV
   glossary   词表编译：数据源 + 手写词表 + 黑名单 -> glossary/compiled.tsv（--template 生成恒等行模板）
@@ -124,8 +159,6 @@ patch 常用参数（其余子命令见 -h）：
   --yes              覆盖安装跳过交互确认
 ```
 
----
-
 ## 它做了什么
 
 游戏的表数据放在 **SQLCipher 加密**的 `ExcelDB.db` 里（约 330 MB、424 张表）。
@@ -141,9 +174,8 @@ patch 常用参数（其余子命令见 -h）：
    见 `src/batr/utils/crc.py`）。GL 的 `TableCatalog.bytes` 只记录 CRC32、不记录文件大小。**catalog 完全不用动**。
     - *注：本方法仅对国际服有效，日服似乎会保存大小，因此需要改动TableCatalog*
 
-技术细节与踩坑记录见 [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)。
-
----
+> [!TIP]
+> 技术细节与踩坑记录见 [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)
 
 ## 常见问题
 
@@ -159,11 +191,9 @@ patch 常用参数（其余子命令见 -h）：
 
 汉化后**被改动过的字**可能比繁简同形的字看起来更细或更小（根因分析见[docs/字体问题.md](docs/字体问题.md)）。
 
-**已解决**：使用 [BA-Font-Replacer](https://github.com/Agent-0808/BA-Font-Replacer)
+解决方法：使用 [BA-Font-Replacer](https://github.com/Agent-0808/BA-Font-Replacer)
 把客户端的繁体字体（TW 字体）替换为**思源黑体 SC 的 Medium 与 Bold** 两个字重即可，
 简体字形将全部由同一款字体渲染，观感完全统一。
-
----
 
 ## 目录结构
 
@@ -184,8 +214,6 @@ patch 常用参数（其余子命令见 -h）：
 ├── docs/                     原理、用法说明、词表系统、字体问题
 └── tests/                    pytest（CRC 已知向量、转换样例、端到端）
 ```
-
----
 
 ## License
 
@@ -208,14 +236,13 @@ patch 常用参数（其余子命令见 -h）：
 |---|---|---|
 | [alisns1/blue-archive-gl-simplified](https://github.com/alisns1/blue-archive-gl-simplified)（原项目） | **MIT** | 本仓库的前身（等长替换思路与初始实现） |
 | [OpenCC](https://github.com/BYVoid/OpenCC) | **Apache-2.0** | `src/batr/data/` 下 3 个词库文件（原样复制） |
-| [BA-Modding-Toolkit（BAMT）](https://github.com/Agent-0808/BA-Modding-Toolkit) | **GPL-3.0** | `src/batr/utils/crc.py`（CRC32 追加修正，替代旧的 catalog 改写） |
+| [BA-Modding-Toolkit](https://github.com/Agent-0808/BA-Modding-Toolkit) | **GPL-3.0** | `src/batr/utils/crc.py`（CRC32 追加修正，替代旧的 catalog 改写） |
+| [BA-Characters-Internal-ID](https://github.com/Agent-0808/BA-characters-internal-id) | **CC BY-SA 4.0** | 繁中译名列表与简中民译 |
 | BlueArchive-Tools / BlueArchive-Tools-CLI（delayboy 系） | AGPL-3.0 | 仅作 SQLCipher 参数的**参考**；**本仓库不含其任何代码** |
 | 社区所有做国际服/日服汉化的朋友 | — | 思路与经验 |
 
 > **声明**：本仓库不含任何游戏素材。密钥 `ef0aaca0…` 是社区公开流传的**数据值**，
 > 作为可覆盖的默认值提供（`--key` / `BA_KEY`）。
-
----
 
 ## 免责声明 / Disclaimer
 

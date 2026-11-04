@@ -28,9 +28,9 @@
 模板模式（--template，繁→繁民译流程）：
 * 往 glossary/local/name.tsv 追加名段 / 全名连写 / 皮肤名恒等行（键=KivoWiki 繁体
   字段，右列待填）；往 glossary/local/text.tsv 追加皮肤括号恒等行（如 (單車)<TAB>(單車)，
-  没有脚手架用户很难自己发现皮肤词条的带括号格式）。
+  没有模板用户很难自己发现皮肤词条的带括号格式）。
 * 已有内容逐行保留、只补新增键；shared/ 与 local/ 中同 mode 已存在的键不补
-  （完整词条无需脚手架）；未填写的恒等行若已不在生成集合里则删除。
+  （完整词条无需模板）；未填写的恒等行若已不在生成集合里则删除。
 * 右列与左列相同的行 = 未填写，编译加载时自动跳过，不产生任何替换。
 """
 from __future__ import annotations
@@ -68,7 +68,7 @@ class GlossaryTap(BaseTap):
     """词表编译：数据源 + 手写词表 + 黑名单 -> glossary/compiled.tsv。"""
 
     profile: str = DEFAULT_GLOSSARY_PROFILE  # 词表流程：t2s 繁->简（编入 auto）/ t2t 繁->繁（只编手写）
-    template: bool = False  # 模板模式：往 local/ 补恒等行脚手架（繁->繁民译用），不编译
+    template: bool = False  # 模板模式：往 local/ 补恒等行模板（繁->繁民译用），不编译
     refresh: bool = False  # 强制重新下载 kivo 数据（students.json / skin_map.json）
 
 
@@ -334,7 +334,7 @@ def collect_name_keys(students: list[dict], skin_map: dict[str, dict], black_exa
 
 
 def handwritten_keys(mode: str) -> set[str]:
-    """shared/ 与 local/ 中该 mode 块下已存在的键（含恒等行）：完整词条无需再补脚手架。"""
+    """shared/ 与 local/ 中该 mode 块下已存在的键（含恒等行）：完整词条无需再补模板。"""
     keys: set[str] = set()
     for directory in (GLOSSARY_SHARED, GLOSSARY_LOCAL):
         for path in hand_files(directory):
@@ -347,7 +347,7 @@ def handwritten_keys(mode: str) -> set[str]:
 
 
 def write_identity_rows(path: Path, mode: str, keys: list[str], existing: set[str]) -> None:
-    """恒等行脚手架：已有内容逐行保留，只补新增键；本 mode 下未填写的（恒等）行
+    """恒等行模板：已有内容逐行保留，只补新增键；本 mode 下未填写的（恒等）行
     若已不在生成集合里则删除。追加行前确保文件末尾处于本 mode（必要时补 `# mode:` 头）。"""
     with open(path, encoding="utf-8-sig", newline="") as f:
         lines = [ln.rstrip("\r\n") for ln in f]
@@ -392,10 +392,10 @@ def write_identity_rows(path: Path, mode: str, keys: list[str], existing: set[st
 
 
 def update_template(students: list[dict], skin_map: dict[str, dict]) -> None:
-    """往 local/ 补恒等行脚手架：name.tsv 名段/全名/皮肤名 + text.tsv 皮肤括号行。"""
+    """往 local/ 补恒等行模板：name.tsv 名段/全名/皮肤名 + text.tsv 皮肤括号行。"""
     black_exact, black_sub, _ = load_blacklist()
     name_keys = [k for k in collect_name_keys(students, skin_map, black_exact) if k not in black_exact]
-    # text.tsv 只补皮肤括号恒等行：t2t 下 auto 不编入，皮肤 text 键没有脚手架用户很难自己发现格式
+    # text.tsv 只补皮肤括号恒等行：t2t 下 auto 不编入，皮肤 text 键没有模板用户很难自己发现格式
     text_keys = [
         f"({(loc.get('tw') or '').strip()})"
         for loc in skin_map.values()

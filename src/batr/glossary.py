@@ -27,7 +27,7 @@ DEFAULT_MODE = "sub"
 
 
 def iter_rows(path: str) -> Iterator[tuple[str, int, str]]:
-    """逐行产出 (当前mode, 行号, 原文行)，词表加载与脚手架扫描共用一份游标逻辑。
+    """逐行产出 (当前mode, 行号, 原文行)，词表加载与模板扫描共用一份游标逻辑。
 
     行级 mode 游标：注释行 `# mode: xxx` 从下一行起切换归属（缺省 sub），
     其余注释行与空行跳过；未知 mode 声明告警并保持当前游标。
@@ -102,7 +102,7 @@ class Glossary:
                 old, new, mode = parts[0].strip(), parts[1], parts[2].strip().lower()
                 src = parts[3].strip() if len(parts) > 3 else ""
                 if old == new:
-                    continue  # 恒等行（未填写的脚手架）
+                    continue  # 恒等行（未填写的模板）
                 if mode not in MODES:
                     print(f"[glossary] {path}:{ln} 未知 mode {mode!r}，跳过")
                     continue

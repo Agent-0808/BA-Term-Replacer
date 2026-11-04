@@ -30,3 +30,8 @@ DEFAULT_GLOSSARY_PROFILE = "t2s"
 
 # 输出目录：省略 --out 时，输出库写到 <该目录>/<输入文件名>。
 DEFAULT_OUT_DIR = "output"
+
+# 干净副本默认路径：backup 子命令把未改动的库复制到这里，之后 patch / scan / export
+# 显式 --db 指向它——游戏目录里的库可能已被 --install 改动过，二次补丁会大面积零命中，
+# scan --diff 也需要原始库做基准。
+DEFAULT_BACKUP = "work/db/ExcelDB.db"
