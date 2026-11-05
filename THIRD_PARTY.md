@@ -45,7 +45,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 参考来源 | [BlueArchive-Tools / BlueArchive-Tools-CLI](https://github.com/DelAD/delayboy) — `utils/sqlcipher.py` 等 |
+| 参考来源 | [BlueArchive-Tools / BlueArchive-Tools-CLI](https://github.com/delayboy/BlueArchive-Translator) — `utils/sqlcipher.py` 等 |
 | 许可证 | **AGPL-3.0** ⚠️ |
 | 使用方式 | **仅作为参考**，用于确认 SQLCipher 4 的参数（页大小 4096、KDF 迭代 256000、HMAC-SHA512、保留区 80 字节）。 |
 | 重要说明 | **本仓库不包含该项目的任何代码**，因此不受 AGPL-3.0 的传染性约束。数据库的打开/读写全部交给独立的第三方库 `sqlcipher3`。 |
@@ -65,7 +65,8 @@
 
 | 包 | 许可证 | 用途 |
 |---|---|---|
-| [`sqlcipher3-wheels`](https://pypi.org/project/sqlcipher3-wheels/) | 见 PyPI 页面（SQLCipher 本体为 BSD 风格） | 打开/写入 SQLCipher 加密的 SQLite 库 |
+| [`sqlcipher3-wheels`](https://pypi.org/project/sqlcipher3-wheels/) | **zlib**（[sqlcipher3 绑定](https://github.com/coleifer/sqlcipher3/blob/master/LICENSE)）；SQLCipher 本体为 BSD 风格 | 打开/写入 SQLCipher 加密的 SQLite 库 |
+| [`typed-argument-parser`](https://github.com/swansonk14/typed-argument-parser) | MIT | 命令行参数解析 |
 
 安装方式见 `pyproject.toml`（`uv sync`）。依赖的许可证随其发行包一并提供，本仓库不再重复分发。
 

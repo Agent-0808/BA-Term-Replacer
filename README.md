@@ -19,8 +19,6 @@
 |---|---|
 | ![before](docs/before.jpg) | ![docs/after.jpg](docs/after.jpg) |
 
----
-
 ## 安装
 
 - 需要 [uv](https://docs.astral.sh/uv/)
@@ -36,24 +34,9 @@ uv sync
 两种主要用途，各自是一条完整流程（备份 → 定制词表 → 编译 → 应用）：
 
 - **流程 A：繁→简**    —— KivoWiki 民译词表自动获取 + OpenCC 繁体转简体，不改词表也能直接跑
-- **流程 B：繁→繁民译** —— 不转字形，auto 不编入，自己填译文
+- **流程 B：繁→繁民译** —— 不转字形，auto 不编入，需要自己填写译文
 
 命令参数与排查路径详解见 [docs/脚本用法说明.md](docs/脚本用法说明.md)；词表文件语法与运作机制见 [docs/词表系统.md](docs/词表系统.md)。
-
-### 词表文件夹内容
-
-想改什么 → 写哪个文件（两条流程通用）：
-
-| 想要修改 | 修改文件 |
-|---|---|
-| 写自己的角色名译名（繁→繁） | `local/name.tsv`（改恒等行右列，`--template` 生成模板） |
-| 补充/修正译名（个人偏好） | `local/name.tsv` / `local/text.tsv`（不入库，后加载优先于 shared） |
-| 地名/组织/术语等通用共识 | `shared/text.tsv`（入库共享，可 PR） |
-| 禁用某个词条（自动或手写都行） | `local/blacklist.txt` |
-
-格式：TSV 两列 `旧词<TAB>新词`，**分隔符是 Tab 不是空格**；键必须是数据库里的繁体原文；值写译文（繁→繁写繁体；繁→简可以简体或繁体，还会通过 OpenCC 转成简体）。
-
-其余语法（`# mode:` 声明、歧义词处理、黑名单 scope、皮肤名括号键等）见 [docs/词表系统.md](docs/词表系统.md)。
 
 ### 流程 A：繁→简
 
@@ -88,34 +71,61 @@ uv run batr patch --db work/db/ExcelDB.db --install
 
 1. **备份文本数据库（推荐）**：
 
-同流程 A 第 1 步，`uv run batr backup`。
+```bash
+# 复制为 work/db/ExcelDB.db（自动定位游戏库；已存在不覆盖，--force 重写）
+uv run batr backup     
+`````
+
+同流程 A 第 1 步。
 
 2. **生成待填模板**：
 
 ```bash
-uv run batr glossary --template   # 往 glossary/local/ 补恒等行模板，不编译（幂等，已有内容只补新键）
+# 往 glossary/local/ 补恒等行模板，不编译
+uv run batr glossary --template
 ```
 
-3. **填写模板**：进入 `glossary/local/`，把恒等行右列改成你喜欢的繁体译文；未填的行（右列 = 左列）编译时自动跳过。
+3. **填写模板**：
+
+进入 `glossary/local/` 目录，把恒等行右列改成你喜欢的繁体译文；未填的行（右列 = 左列）编译时自动跳过。
 
 4. **编译词表**：
 
 ```bash
-uv run batr glossary --profile t2t   # t2t 模式只编手写词表
+# t2t 模式只编译手写词表，不获取简体民译
+uv run batr glossary --profile t2t
 ```
 
 5. **应用到游戏**
 
-（patch 端 `--profile t2t` 会自动绑定 `--convert none`，保持繁体）：
+`--profile t2t` 参数会自动绑定 `--convert none`，不进行 OpenCC 的繁体→简体转换流程。：
 
 ```bash
-uv run batr patch --db work/db/ExcelDB.db --profile t2t --dry-run
-uv run batr patch --db work/db/ExcelDB.db --profile t2t --out output/ExcelDB.tw.db
+uv run batr patch --db work/db/ExcelDB.db --profile t2t --out output/ExcelDB.db
 # 确认没问题后覆盖安装到游戏目录：
 uv run batr patch --db work/db/ExcelDB.db --profile t2t --install
 ```
 
 替换没生效、译名不对时，用 `uv run batr scan` 做字段级排查，完整参数与排查路径见 [docs/脚本用法说明.md](docs/脚本用法说明.md)。
+
+### 词表文件夹内容
+
+`glossary/` 目录下存放将要编译的词表文件。
+
+使用 `uv run batr glossary` 命令后便会生成 `glossary/compiled.tsv` 文件，供 `patch` 命令使用。
+
+想改什么 → 写哪个文件（两条流程通用）：
+
+| 想要修改 | 修改文件 |
+|---|---|
+| 写自己的角色名译名 | `local/name.tsv`（`--template` 生成空模板） |
+| 补充/修正译名（个人偏好） | `local/name.tsv` / `local/text.tsv`（不入库，后加载优先于 shared） |
+| 地名/组织/术语等通用共识 | `shared/text.tsv`（入库共享，可 PR） |
+| 禁用某个词条（自动或手写都行） | `local/blacklist.txt` |
+
+格式：TSV 两列 `旧词<TAB>新词`，**分隔符是 Tab 不是空格**；键必须是数据库里的繁体原文；值写译文（繁→繁写繁体；繁→简可以简体或繁体，还会通过 OpenCC 转成简体）。
+
+其余语法（`# mode:` 声明、歧义词处理、黑名单 scope、皮肤名括号键等）见 [docs/词表系统.md](docs/词表系统.md)。
 
 ## 命令一览
 
@@ -172,20 +182,10 @@ patch 常用参数（其余子命令见 -h）：
    uoffset——已有字节一概不移动，所有旧偏移依然有效。
 4. **CRC32 追加修正**：输出末尾追加 4 字节，使整体 CRC32 与输入完全一致（标准 CRC32 可逆构造，
    见 `src/batr/utils/crc.py`）。GL 的 `TableCatalog.bytes` 只记录 CRC32、不记录文件大小。**catalog 完全不用动**。
-    - *注：本方法仅对国际服有效，日服似乎会保存大小，因此需要改动TableCatalog*
+    - *注：本方法仅对国际服有效，日服似乎会保存大小，因此需要改动TableCatalog。*
 
 > [!TIP]
 > 技术细节与踩坑记录见 [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)
-
-## 常见问题
-
-| 现象 | 原因 / 解决 |
-|---|---|
-| 打不开数据库（wrong key） | 游戏大版本更新换了密钥 → `--key` 覆盖 |
-| 转换完少数词仍是台式 | 词库覆盖面问题，欢迎 PR 补词（改 `src/batr/data/`） |
-| 某些字大小/粗细不统一 | 用 [BA-Font-Replacer](https://github.com/Agent-0808/BA-Font-Replacer) 替换字体即可，详见 [docs/字体问题.md](docs/字体问题.md) |
-| 进游戏又变回繁体了 | 游戏本体更新了 → 使用新数据库重新执行即可 |
-| 游戏更新后失效 | 库变了 → 重新拉取并跑 `batr patch`（对输出 CRC 自动对齐新库） |
 
 ## 字体观感问题
 
@@ -217,36 +217,30 @@ patch 常用参数（其余子命令见 -h）：
 
 ## License
 
-本仓库：**GPL-3.0**（见 [LICENSE](LICENSE)）—— 因包含来自 BAMT（GPL-3.0）的
-[src/batr/utils/crc.py](src/batr/utils/crc.py)，全仓库统一按 GPL-3.0 分发。
-原项目 [alisns1/blue-archive-gl-simplified](https://github.com/alisns1/blue-archive-gl-simplified) 的 MIT
-许可证全文保留于 [licenses/](licenses/)。
-`src/batr/data/` 下的 OpenCC 词库：**Apache-2.0**（见 [src/batr/data/LICENSE-OpenCC.txt](src/batr/data/LICENSE-OpenCC.txt)）。
-其余第三方署名见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+**GPL-3.0**（见 [LICENSE](LICENSE)）。
 
 ## 署名与第三方组件
 
-本工具基于原项目 [alisns1/blue-archive-gl-simplified](https://github.com/alisns1/blue-archive-gl-simplified)
-（**MIT**，许可证全文见 [licenses/blue-archive-gl-simplified-LICENSE.txt](licenses/blue-archive-gl-simplified-LICENSE.txt)）
-现代化重构而来 —— 致谢原作者与所有贡献者。
+本工具基于原项目 [alisns1/blue-archive-gl-simplified](https://github.com/alisns1/blue-archive-gl-simplified)（**MIT**，[许可证全文](licenses/blue-archive-gl-simplified-LICENSE.txt)）现代化重构而来 —— 致谢原作者与所有贡献者。
 
 本项目站在社区成果之上，逐项署名见 **[THIRD_PARTY.md](THIRD_PARTY.md)**：
 
-| 来源 | 许可证 | 用在哪 |
-|---|---|---|
-| [alisns1/blue-archive-gl-simplified](https://github.com/alisns1/blue-archive-gl-simplified)（原项目） | **MIT** | 本仓库的前身（等长替换思路与初始实现） |
-| [OpenCC](https://github.com/BYVoid/OpenCC) | **Apache-2.0** | `src/batr/data/` 下 3 个词库文件（原样复制） |
-| [BA-Modding-Toolkit](https://github.com/Agent-0808/BA-Modding-Toolkit) | **GPL-3.0** | `src/batr/utils/crc.py`（CRC32 追加修正，替代旧的 catalog 改写） |
-| [BA-Characters-Internal-ID](https://github.com/Agent-0808/BA-characters-internal-id) | **CC BY-SA 4.0** | 繁中译名列表与简中民译 |
-| BlueArchive-Tools / BlueArchive-Tools-CLI（delayboy 系） | AGPL-3.0 | 仅作 SQLCipher 参数的**参考**；**本仓库不含其任何代码** |
-| 社区所有做国际服/日服汉化的朋友 | — | 思路与经验 |
+- [blue-archive-gl-simplified](https://github.com/alisns1/blue-archive-gl-simplified)：本仓库的前身（等长替换思路与初始实现）（MIT）
+- [OpenCC](https://github.com/BYVoid/OpenCC)：繁简映射词库（Apache-2.0）
+- [BA-Characters-Internal-ID](https://github.com/Agent-0808/BA-characters-internal-id)：繁中译名列表与简中民译，运行时动态获取（CC BY-SA 4.0）
+- [BA-Modding-Toolkit](https://github.com/Agent-0808/BA-Modding-Toolkit)：CRC32 追加修正（GPL-3.0）
+- BlueArchive-Tools / BlueArchive-Tools-CLI（delayboy 系）：仅作 SQLCipher 参数的参考；**本仓库不含其任何代码**（AGPL-3.0）
+- 社区所有做国际服/日服汉化的朋友：思路与经验
 
-> **声明**：本仓库不含任何游戏素材。密钥 `ef0aaca0…` 是社区公开流传的**数据值**，
-> 作为可覆盖的默认值提供（`--key` / `BA_KEY`）。
+运行时依赖（由 `uv sync` 自动安装，定义见 [pyproject.toml](pyproject.toml)）：
+
+- [sqlcipher3-wheels](https://pypi.org/project/sqlcipher3-wheels/)：SQLCipher 加密 SQLite 库的 Python 绑定，负责打开/写入 `ExcelDB.db`（zlib；SQLCipher 本体 BSD 风格）
+- [typed-argument-parser](https://github.com/swansonk14/typed-argument-parser)：类型注解驱动的命令行参数解析（MIT）
 
 ## 免责声明 / Disclaimer
-
+<sub>
 This project is intended solely for educational and demonstrative purposes and does not provide any actual resources. Please note that all content downloaded through this project should only be used for legal and legitimate purposes. The developers are not liable for any direct or indirect loss, damage, legal liability, or other consequences that may arise from the use of this project. Users assume all risks associated with the use of this project and must ensure compliance with all relevant laws and regulations. If anyone uses this project for any unauthorized or illegal activities, the developers bear no responsibility. Users are responsible for their own actions and should understand the risks involved in using this project.
+</sub>
 
 "Blue Archive" is a registered trademark of NEXON Korea Corp. & NEXON GAMES Co., Ltd. All rights reserved.
 
@@ -255,3 +249,6 @@ This project is intended solely for educational and demonstrative purposes and d
 “蔚蓝档案”是上海星啸网络科技有限公司的注册商标，版权所有。
 
 「ブルーアーカイブ」は株式会社Yostarの登録商標です。著作権はすべて保有されています。
+
+> 本仓库不含任何游戏素材。密钥 `ef0aaca0…` 是社区公开流传的**数据值**，
+> 作为可覆盖的默认值提供（`--key` / `BA_KEY`）。
