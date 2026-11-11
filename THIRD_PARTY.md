@@ -20,11 +20,11 @@
 
 | 项 | 内容 |
 |---|---|
-| 文件 | `src/batr/data/TSCharacters.txt`、`src/batr/data/TSPhrases.txt`、`src/batr/data/TWPhrasesRev.txt` |
+| 文件 | `src/batr/data/OpenCC/TSCharacters.txt`、`src/batr/data/OpenCC/TSPhrases.txt`、`src/batr/data/OpenCC/TWPhrasesRev.txt` |
 | 来源 | [BYVoid/OpenCC](https://github.com/BYVoid/OpenCC) — `data/dictionary/` |
 | 许可证 | **Apache License 2.0** |
 | 使用方式 | **原样复制，未作修改** |
-| 许可证全文 | [`src/batr/data/LICENSE-OpenCC.txt`](src/batr/data/LICENSE-OpenCC.txt) |
+| 许可证全文 | [`src/batr/data/OpenCC/LICENSE-OpenCC.txt`](src/batr/data/OpenCC/LICENSE-OpenCC.txt) |
 
 `src/batr/convert.py` 只是这套词库的读取与应用逻辑，词库数据本身版权归 OpenCC 项目所有。
 

@@ -1,7 +1,29 @@
 """默认配置：密钥、表过滤、OpenCC 模式。"""
+from __future__ import annotations
 
-# 蔚蓝档案 GL 公开流传的库密钥（PC / Android 相同），可用 --key 覆盖。
-DEFAULT_KEY = "ef0aaca06f34b4a4be3172a75a3ea565e815f9ece35b1fb12b7a166ba0807bc4"
+import string
+from pathlib import Path
+
+# 库密钥文件（包内 data/，随版本提交）：一行 64 字符 hex，换密钥只改这个文件，
+# 取密钥方法见 docs/获取数据库密钥.md；也可用 --key 临时覆盖。
+KEY_FILE = Path(__file__).resolve().parent / "data" / "key.txt"
+KEY_HEX_LEN = 64
+
+
+def load_key(path: str | Path = KEY_FILE) -> str:
+    """读取密钥文件；文件缺失或内容不是 64 字符 hex 时直接报错（不回退内置值）。"""
+    path = Path(path)
+    if not path.exists():
+        raise RuntimeError(f"密钥文件不存在: {path}")
+    key = path.read_text(encoding="utf-8").strip()
+    if len(key) != KEY_HEX_LEN or any(c not in string.hexdigits for c in key):
+        raise RuntimeError(f"密钥文件格式不对: {path}（需要 {KEY_HEX_LEN} 字符 hex）")
+    return key.lower()
+
+
+# 默认密钥：导入时从 key.txt 读取（换密钥只改文件，不用改代码）；--key 仍可临时覆盖。
+DEFAULT_KEY = load_key()
+
 
 # 可能包含玩家可见文本的表（正则，忽略大小写）。
 # Messanger 是聊天/Messenger 正文（16120 个中文字段），SNSProfile 是 SNS 简介。

@@ -12,7 +12,7 @@ Provenance / credits
 --------------------
 * SQLCipher 接口参数（页 4096、KDF 256000、HMAC-SHA512、保留 80 字节）经社区工具链
   （BlueArchive-Tools, AGPL-3.0）确认 —— 仅作参考，**未使用其代码**。
-* 默认密钥为社区公开流传值，作为可覆盖默认提供。
+* 默认密钥从包内 `data/key.txt` 读取（社区公开流传值），可用 `--key` 覆盖。
 * 繁简映射来自 OpenCC 词典（Apache-2.0，见 `data/`）；本文件的库遍历逻辑为原创。
 """
 from __future__ import annotations
@@ -90,6 +90,7 @@ def patch_database(
 ) -> PatchStats:
     """把 src 库的文本按 convert 模式转换，写入 dst（CRC32 与 src 一致）。
 
+    key: 32 字节 SQLCipher 密钥（hex）；缺省读包内 data/key.txt。
     convert: tw2sp / t2s 做 OpenCC 繁->简；none 只做替换表（当前无替换表则无操作）。
     skip_kana: 含平/片假名的字段整体跳过（日文列是 GL 死数据，见设计文档 §6）。
     extra_bytes: CRC 修正前附加到输出末尾的自定义字节，修正后的 CRC 仍与输入一致。

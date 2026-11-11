@@ -1,7 +1,7 @@
 """OpenCC 字典驱动的 繁 -> 简 转换（纯标准库，无第三方依赖）。
 
 字典来自 [OpenCC](https://github.com/BYVoid/OpenCC) 的 `data/dictionary/*.txt`
-（**Apache License 2.0**，原样复制于 `batr/data/`，许可证全文见 `data/LICENSE-OpenCC.txt`）。
+（**Apache License 2.0**，原样复制于 `batr/data/OpenCC/`，许可证全文见 `data/OpenCC/LICENSE-OpenCC.txt`）。
 
 两种模式：
   tw2sp (默认) : TWPhrasesRev + TSPhrases + TSCharacters
@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 # 词库随包安装（package data）。
-DATA_DIR = Path(__file__).resolve().parent / "data"
+DATA_DIR = Path(__file__).resolve().parent / "data" / "OpenCC"
 
 CHAIN: dict[str, tuple[str, ...]] = {
     "tw2sp": ("TWPhrasesRev.txt", "TSPhrases.txt", "TSCharacters.txt"),
