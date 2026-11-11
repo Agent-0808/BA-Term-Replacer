@@ -16,7 +16,7 @@
 
 ---
 
-## 2. OpenCC 词库（已包含在仓库内）
+## 2. OpenCC 词库
 
 | 项 | 内容 |
 |---|---|
@@ -26,11 +26,11 @@
 | 使用方式 | **原样复制，未作修改** |
 | 许可证全文 | [`src/batr/data/LICENSE-OpenCC.txt`](src/batr/data/LICENSE-OpenCC.txt) |
 
-`src/batr/convert.py` 只是这套词库的**读取与应用逻辑**（我们自己写的），词库数据本身版权归 OpenCC 项目所有。
+`src/batr/convert.py` 只是这套词库的读取与应用逻辑，词库数据本身版权归 OpenCC 项目所有。
 
 ---
 
-## 3. CRC32 追加修正（已包含在仓库内）
+## 3. CRC32 追加修正
 
 | 项 | 内容 |
 |---|---|
@@ -41,27 +41,39 @@
 
 ---
 
-## 4. SQLCipher 参数与密钥（事实性信息，未包含其代码）
+## 4. SQLCipher 参数与密钥
 
 | 项 | 内容 |
 |---|---|
-| 参考来源 | [BlueArchive-Tools / BlueArchive-Tools-CLI](https://github.com/delayboy/BlueArchive-Translator) — `utils/sqlcipher.py` 等 |
-| 许可证 | **AGPL-3.0** ⚠️ |
+| 参考来源 | [BlueArchive-Translation/BlueArchive-Tools](https://github.com/BlueArchive-Translation/BlueArchive-Tools) — `utils/sqlcipher.py` 等 |
+| 许可证 | **AGPL-3.0** |
 | 使用方式 | **仅作为参考**，用于确认 SQLCipher 4 的参数（页大小 4096、KDF 迭代 256000、HMAC-SHA512、保留区 80 字节）。 |
-| 重要说明 | **本仓库不包含该项目的任何代码**，因此不受 AGPL-3.0 的传染性约束。数据库的打开/读写全部交给独立的第三方库 `sqlcipher3`。 |
 
-我们自己的密钥校验器（仅用于开发期验证，**未包含在本仓库**）曾按该实现的逻辑重写，
-过程中发现其 HMAC 子密钥长度参数为 32 —— 该参数属于 SQLCipher 的**接口事实**，不受版权保护。
+- 本仓库不包含该项目的任何代码。
+- 参数属于 SQLCipher 的**接口事实**，不受版权保护。
 
 ### 关于密钥本身
 
-`ef0aaca0…807bc4` 是社区**公开流传**的密钥值（上述项目及相关文档中均有记载）。
 密钥属于**数据/事实**，不是受版权保护的表达；本仓库将其作为可覆盖的默认值提供
 （`--key` / `BA_KEY`）。
 
 ---
 
-## 5. 运行时依赖（未包含在仓库内，由用户自行安装）
+## 5. 密钥动态获取方法
+
+| 项 | 内容 |
+|---|---|
+| 参考来源 | [delayboy/BlueArchive-Translator](https://github.com/delayboy/BlueArchive-Translator) — `相关文档/` 下的《游戏密钥 hook 点迁移总结》 |
+| 许可证 | **未声明**（该仓库为 monorepo，聚合了大量第三方工具与作者自撰文档，根目录没有 LICENSE） |
+| 使用方式 | **仅参考其公开的逆向思路**：IL2CPP 下 `KeyData` 三段拼接 → `PRAGMA key` 的拦截点位置、以及用 CE 特征码免静态分析定位 Hook 点的方法。|
+
+本仓库不包含该项目的任何代码。
+
+特征码、断点偏移与操作步骤均由本项目在自己的游戏副本上重新实测验证并重写，见 [获取数据库密钥](docs/获取数据库密钥.md) 与 `scripts/find_db_key.lua`。 
+
+---
+
+## F. 运行时依赖
 
 | 包 | 许可证 | 用途 |
 |---|---|---|
@@ -71,22 +83,5 @@
 安装方式见 `pyproject.toml`（`uv sync`）。依赖的许可证随其发行包一并提供，本仓库不再重复分发。
 
 ---
-
-## 6. 其他参考（思路借鉴，未使用其代码）
-
-| 项目 | 许可证 | 借鉴内容 |
-|---|---|---|
-| [BAJP2CNPatch](https://github.com/) （BAJP2CNPatch-main） | MIT | 用代理替换资源文件的整体思路；以及"改 catalog 而非伪造文件"的做法 |
-| [headless-bluearchive / SDK](https://github.com/) （SDK-main） | MIT | `Excel.zip` 口令的推导方式（纯分析用，未收录） |
-| BlueArchive-Translator（相关文档） | 未声明 | 社区文档中关于密钥来源的说明 |
-
----
-
-## 如果你要复用本仓库
-
-- 本仓库（含自有代码与 `src/batr/utils/crc.py`）：**GPL-3.0**（见 [`LICENSE`](LICENSE)）
-- 原项目的 MIT 许可证与署名：见第 1 节，请一并保留
-- `src/batr/data/` 下词库：**Apache-2.0**（保留 `src/batr/data/LICENSE-OpenCC.txt` 即可）
-- 上面第 3、4 节的署名请一并保留
 
 如发现署名有遗漏或不当，欢迎提 Issue 或 PR 指出，我们会立刻更正。

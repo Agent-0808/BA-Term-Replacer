@@ -62,40 +62,10 @@ Localize|Dialog|Scenario|Subtitle|Talk|Mail|Name|Emoji|Voice|Messanger|SNSProfil
 
 ## 二、密钥
 
-```
-ef0aaca06f34b4a4be3172a75a3ea565e815f9ece35b1fb12b7a166ba0807bc4
-```
+见 [获取数据库密钥](./获取数据库密钥.md)
 
-- 这是社区工具（delayboy / BlueArchive-Tools）里公开的那把
 - **PC 端和安卓端是同一把**（网上流传的"两端密钥不同"是错的）
-- 服务端每期活动可能轮换，轮换后用 `--key` 覆盖（`Queuing_GetCryptoKeys` 接口需要已登录会话）
-
-### ⚠️ 最大的坑：HMAC 子密钥长度是 32，不是 64
-
-SQLCipher 校验页头的 HMAC 时，子密钥是这么来的：
-
-```
-hmac_key = PBKDF2-HMAC-SHA512(encryption_key, salt[i] ^ 0x3A, 2 iterations, dklen=32)
-                                                                                  ^^^^^^
-```
-
-**`dklen`** **固定为 32**（SQLCipher 源码里的 `KEY_SIZE`），**不是 SHA512 的摘要长度 64**。
-
-我一开始写成 64，结果是：**密钥完全正确，但所有校验都返回"不匹配"** —— 白白找了几小时。
-
-一个不依赖 AES 的快速校验器（只用 `hashlib`/`hmac`）：
-
-```python
-salt   = page[:16]
-msg    = page[16:4016] + page[4016:4032] + (1).to_bytes(4, 'little')   # 密文 + IV + 页号
-stored = page[4032:4096]
-hmac_key = hashlib.pbkdf2_hmac('sha512', raw_key, bytes(b ^ 0x3A for b in salt), 2, dklen=32)
-assert hmac.compare_digest(stored, hmac.new(hmac_key, msg, 'sha512').digest())
-```
-
-（`reserve = 80` ⇒ `ciphertext_end = 4096 - 80 = 4016`。）
-
-***
+- 服务端每期活动可能轮换，轮换后用 `--key` 覆盖
 
 ## 三、整体流程
 

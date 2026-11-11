@@ -15,11 +15,11 @@
 >
 > 因此仅适用于 **国际服繁中**。
 
-| 改之前 | 改之后 |
+| 修改前 | 修改后 |
 |---|---|
 | ![before](docs/before.jpg) | ![docs/after.jpg](docs/after.jpg) |
 
-## 安装
+## 环境配置
 
 - 需要 [uv](https://docs.astral.sh/uv/)
 
@@ -229,7 +229,7 @@ patch 常用参数（其余子命令见 -h）：
 - [OpenCC](https://github.com/BYVoid/OpenCC)：繁简映射词库（Apache-2.0）
 - [BA-Characters-Internal-ID](https://github.com/Agent-0808/BA-characters-internal-id)：繁中译名列表与简中民译，运行时动态获取（CC BY-SA 4.0）
 - [BA-Modding-Toolkit](https://github.com/Agent-0808/BA-Modding-Toolkit)：CRC32 追加修正（GPL-3.0）
-- BlueArchive-Tools / BlueArchive-Tools-CLI（delayboy 系）：仅作 SQLCipher 参数的参考；**本仓库不含其任何代码**（AGPL-3.0）
+- [delayboy/BlueArchive-Translator](https://github.com/delayboy/BlueArchive-Translator)：参考了获取数据库秘钥的方式（AGPL-3.0）
 - 社区所有做国际服/日服汉化的朋友：思路与经验
 
 运行时依赖（由 `uv sync` 自动安装，定义见 [pyproject.toml](pyproject.toml)）：
@@ -250,5 +250,4 @@ This project is intended solely for educational and demonstrative purposes and d
 
 「ブルーアーカイブ」は株式会社Yostarの登録商標です。著作権はすべて保有されています。
 
-> 本仓库不含任何游戏素材。密钥 `ef0aaca0…` 是社区公开流传的**数据值**，
-> 作为可覆盖的默认值提供（`--key` / `BA_KEY`）。
+> 本仓库不含任何游戏素材。
