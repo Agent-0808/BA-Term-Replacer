@@ -108,6 +108,8 @@ uv run batr patch --db work/db/ExcelDB.db --profile t2t --install
 
 替换没生效、译名不对时，用 `uv run batr scan` 做字段级排查，完整参数与排查路径见 [docs/脚本用法说明.md](docs/脚本用法说明.md)。
 
+如果在 patch 时发现密钥错误，请根据 [docs/获取数据库密钥.md](docs/获取数据库密钥.md) 重新获取密钥。
+
 ### 词表文件夹内容
 
 `glossary/` 目录下存放将要编译的词表文件。
@@ -199,20 +201,20 @@ patch 常用参数（其余子命令见 -h）：
 
 ```
 .
-├── pyproject.toml            uv 项目定义（依赖、batr 命令入口）
+├── pyproject.toml     uv 项目定义（依赖、batr 命令入口）
 ├── src/batr/
-│   ├── cli.py                命令行入口（子命令注册与分发）
-│   ├── commands/             各子命令（patch / scan / export / glossary / paths）
-│   ├── patch.py              遍历库 → 等长转换 → CRC 修正 → 自校验
-│   ├── convert.py            繁简映射（OpenCC 词库，纯 Python）
-│   ├── db.py                 SQLCipher 打开 / 遍历
-│   ├── utils/                paths.py（游戏路径定位）、crc.py（CRC32 追加修正，来自 BAMT，GPL-3.0）
-│   ├── config.py             默认密钥、表过滤等
-│   └── data/                 OpenCC 词库（Apache-2.0）
-├── scripts/legacy/           从旧项目继承，已弃用的脚本
-├── glossary/                 词表（自动生成的本体不入库；blacklist/terms 入库共享）
-├── docs/                     原理、用法说明、词表系统、字体问题
-└── tests/                    pytest（CRC 已知向量、转换样例、端到端）
+│   ├── cli.py         命令行入口（子命令注册与分发）
+│   ├── commands/      各子命令（patch / scan / export / glossary / paths）
+│   ├── patch.py       遍历库 → 等长转换 → CRC 修正 → 自校验
+│   ├── convert.py     繁简映射（OpenCC 词库，纯 Python）
+│   ├── db.py          SQLCipher 打开 / 遍历
+│   ├── utils/         paths.py（游戏路径定位）、crc.py（CRC32 追加修正）
+│   ├── config.py      默认密钥、表过滤等
+│   └── data/          OpenCC 词库（Apache-2.0）
+├── scripts/           脚本
+├── glossary/          词表（自动生成的本体不入库；blacklist/terms 入库共享）
+├── docs/              原理、用法说明、词表系统、字体问题
+└── tests/             pytest（CRC 已知向量、转换样例、端到端）
 ```
 
 ## License
@@ -229,7 +231,7 @@ patch 常用参数（其余子命令见 -h）：
 - [OpenCC](https://github.com/BYVoid/OpenCC)：繁简映射词库（Apache-2.0）
 - [BA-Characters-Internal-ID](https://github.com/Agent-0808/BA-characters-internal-id)：繁中译名列表与简中民译，运行时动态获取（CC BY-SA 4.0）
 - [BA-Modding-Toolkit](https://github.com/Agent-0808/BA-Modding-Toolkit)：CRC32 追加修正（GPL-3.0）
-- [delayboy/BlueArchive-Translator](https://github.com/delayboy/BlueArchive-Translator)：参考了获取数据库秘钥的方式（AGPL-3.0）
+- [delayboy/BlueArchive-Translator](https://github.com/delayboy/BlueArchive-Translator)：参考了获取数据库秘钥的方式
 - 社区所有做国际服/日服汉化的朋友：思路与经验
 
 运行时依赖（由 `uv sync` 自动安装，定义见 [pyproject.toml](pyproject.toml)）：
@@ -250,4 +252,4 @@ This project is intended solely for educational and demonstrative purposes and d
 
 「ブルーアーカイブ」は株式会社Yostarの登録商標です。著作権はすべて保有されています。
 
-> 本仓库不含任何游戏素材。
+本仓库不含任何游戏素材。
