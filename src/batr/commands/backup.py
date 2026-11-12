@@ -11,12 +11,31 @@
 from __future__ import annotations
 
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 from ..config import DEFAULT_BACKUP
 from ..utils import crc
 from ..utils.paths import BARegion, resolve_excel_db
 from .base import BaseTap
+
+
+def _describe(path: Path) -> str:
+    """文件的大小与时间信息（不含路径）：大小 + 修改时间 + 创建时间（Windows 上 st_ctime 即创建时间）。"""
+    st = path.stat()
+    fmt = "%Y-%m-%d %H:%M:%S"
+    mtime = datetime.fromtimestamp(st.st_mtime).strftime(fmt)
+    ctime = datetime.fromtimestamp(st.st_ctime).strftime(fmt)
+    return f"{st.st_size / 1048576:.1f} MB, 修改于 {mtime}, 创建于 {ctime}, CRC = {crc.compute_crc32(path)}"
+
+
+def _print_pair(src: Path, dst: Path) -> None:
+    """依次打印两个文件：各自路径一行、描述一行，文件之间空一行。"""
+    for i, (label, path) in enumerate((("源", src), ("副本", dst))):
+        if i:
+            print()
+        print(f"{label}: {path}")
+        print(f"  {_describe(path)}")
 
 
 class BackupTap(BaseTap):
@@ -43,6 +62,8 @@ def handle_backup(args: BackupTap) -> int:
         return 1
     if dst.exists() and not args.force:
         print(f"目标已存在: {dst}（防误覆盖干净副本；确认要覆盖请加 --force）")
+        print()
+        _print_pair(src, dst)
         return 1
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
